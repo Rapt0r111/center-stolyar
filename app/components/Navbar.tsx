@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import Image from 'next/image'; // Импортируем компонент Image
 import { Menu, X, Phone } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -47,10 +48,19 @@ export default function Navbar({ onNavClick }: NavbarProps) {
             onClick={() => handleLink('hero')}
             className="flex items-center gap-3 group"
           >
-            <div className="w-10 h-10 rounded-lg bg-[#c8a96e] flex items-center justify-center shadow-md group-hover:bg-[#d4b87e] transition-colors">
-              <span className="text-[#1a1008] font-bold text-sm tracking-wider">ЦСИ</span>
+            {/* Контейнер для логотипа */}
+            <div className="relative w-30 h-30 flex items-center justify-center">
+              <Image
+                src="/images/logo-black.png"
+                alt="ЦСИ Логотип"
+                width={100}
+                height={80}
+                className="object-contain transition-transform group-hover:scale-110"
+                priority // Добавляем priority, так как это LCP элемент (лого в шапке)
+              />
             </div>
-            <div className="hidden sm:block">
+            
+            <div className="hidden sm:block text-left">
               <p className="text-white font-semibold text-sm leading-tight">Центр Столярных</p>
               <p className="text-[#c8a96e] text-xs leading-tight tracking-widest uppercase">Изделий</p>
             </div>
