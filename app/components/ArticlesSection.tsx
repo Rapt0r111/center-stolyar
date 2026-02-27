@@ -2,8 +2,10 @@
 
 import { ArrowRight, Calendar } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
+import Image from 'next/image';
 import { cn } from '@/lib/utils';
 
+// Обновленный массив: добавлено поле image
 const ARTICLES = [
   {
     date: '15 января 2026',
@@ -11,6 +13,7 @@ const ARTICLES = [
     title: 'Металлические ограждения лестниц из нержавеющей стали',
     excerpt: 'Нержавеющая сталь в сочетании с деревом — один из самых популярных запросов 2026 года. Рассказываем о видах и преимуществах.',
     color: '#5c3d1e',
+    image: '/images/article-1.jpeg', // Путь к первому фото (кованые перила)
   },
   {
     date: '8 декабря 2025',
@@ -18,6 +21,7 @@ const ARTICLES = [
     title: 'Тренды деревянных интерьеров: что актуально в 2026 году',
     excerpt: 'Натуральные фактуры, тёмные породы дерева и смешение стилей — разбираем главные тенденции в оформлении жилых пространств.',
     color: '#3d2b1f',
+    image: '/images/article-2.jpeg', // Путь ко второму фото (витрины и стол)
   },
   {
     date: '22 ноября 2025',
@@ -25,6 +29,7 @@ const ARTICLES = [
     title: 'Как выбрать породу дерева для лестницы: дуб, ясень или бук?',
     excerpt: 'Сравниваем три самые популярные породы для лестниц по прочности, внешнему виду и цене. Помогаем сделать правильный выбор.',
     color: '#4a3020',
+    image: '/images/article-3.jpeg', // Путь к третьему фото (ступени на металлокаркасе)
   },
 ];
 
@@ -62,7 +67,7 @@ export default function ArticlesSection() {
             <article
               key={a.title}
               className={cn(
-                'group relative rounded-2xl overflow-hidden transition-all duration-500 hover:-translate-y-1 hover:shadow-[0_20px_60px_rgba(0,0,0,0.4)] cursor-pointer',
+                'group relative rounded-2xl overflow-hidden transition-all duration-500 hover:-translate-y-1 hover:shadow-[0_20px_60px_rgba(0,0,0,0.4)] cursor-pointer flex flex-col',
                 visible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'
               )}
               style={{
@@ -72,19 +77,21 @@ export default function ArticlesSection() {
               }}
             >
               {/* Color bar top */}
-              <div className="h-1 w-full" style={{ background: `linear-gradient(90deg, ${a.color}, #c8a96e)` }} />
 
-              {/* Thumb placeholder */}
-              <div className="h-44 relative overflow-hidden"
-                style={{ background: `linear-gradient(135deg, ${a.color} 0%, #c8a96e33 100%)` }}>
-                <div className="absolute inset-0 opacity-[0.07]"
-                  style={{ backgroundImage: 'repeating-linear-gradient(0deg, transparent, transparent 4px, rgba(255,255,255,0.1) 4px, rgba(255,255,255,0.1) 5px)' }} />
-                <div className="absolute inset-0 flex items-center justify-center">
-                  <span className="text-5xl opacity-30">📰</span>
-                </div>
+              {/* Изображение статьи */}
+              <div className="h-56 relative overflow-hidden w-full">
+                <Image
+                  src={a.image}
+                  alt={a.title}
+                  fill
+                  className="object-cover transition-transform duration-700 group-hover:scale-105"
+                  sizes="(max-width: 768px) 100vw, (max-width: 1200px) 33vw, 400px"
+                />
+                {/* Легкий градиент поверх картинки, чтобы она мягче вписывалась в темный дизайн */}
+                <div className="absolute inset-0 bg-gradient-to-t from-[#2a1d12]/80 via-transparent to-transparent opacity-80" />
               </div>
 
-              <div className="p-6">
+              <div className="p-6 flex-grow flex flex-col">
                 <div className="flex items-center gap-3 mb-4">
                   <span className="px-2.5 py-0.5 rounded-full bg-[#c8a96e]/15 text-[#c8a96e] text-xs font-medium border border-[#c8a96e]/20">
                     {a.tag}
@@ -96,8 +103,8 @@ export default function ArticlesSection() {
                 <h3 className="text-white font-semibold text-base leading-snug mb-3 group-hover:text-[#c8a96e] transition-colors line-clamp-2">
                   {a.title}
                 </h3>
-                <p className="text-white/40 text-sm leading-relaxed mb-6 line-clamp-3">{a.excerpt}</p>
-                <button className="flex items-center gap-2 text-[#c8a96e] text-sm font-medium group/btn hover:text-[#d4b87e] transition-colors">
+                <p className="text-white/40 text-sm leading-relaxed mb-6 line-clamp-3 flex-grow">{a.excerpt}</p>
+                <button className="flex items-center gap-2 text-[#c8a96e] text-sm font-medium group/btn hover:text-[#d4b87e] transition-colors mt-auto w-fit">
                   Подробнее
                   <ArrowRight className="w-3.5 h-3.5 group-hover/btn:translate-x-1 transition-transform" />
                 </button>

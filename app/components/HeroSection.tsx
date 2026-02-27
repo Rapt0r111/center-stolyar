@@ -109,7 +109,7 @@ export default function HeroSection({ onCta }: HeroSectionProps) {
           {/* Description */}
           <p
             className={cn(
-              'text-white/60 text-lg max-w-xl leading-relaxed mb-12 transition-all duration-700 delay-300',
+              'text-white/60 text-lg text-justify max-w-2xl leading-relaxed mb-12 transition-all duration-700 delay-300',
               visible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-6'
             )}
           >

@@ -1,5 +1,6 @@
 'use client';
 import { Phone, Mail, MapPin, ExternalLink } from 'lucide-react';
+import Image from 'next/image';
 
 export default function FooterSection() {
     return (
@@ -121,8 +122,15 @@ export default function FooterSection() {
 
                     <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                         <div className="flex items-center gap-3">
-                            <div className="w-7 h-7 rounded bg-[#c8a96e] flex items-center justify-center">
-                                <span className="text-[#1a1008] font-bold text-xs">ЦСИ</span>
+                            <div className="relative w-30 h-20 flex items-center justify-center">
+                                <Image
+                                    src="/images/logo-black.png"
+                                    alt="ЦСИ Логотип"
+                                    width={100}
+                                    height={80}
+                                    className="object-contain transition-transform group-hover:scale-110"
+                                    priority // Добавляем priority, так как это LCP элемент (лого в шапке)
+                                />
                             </div>
                             <p className="text-white/30 text-xs">© 2008–2026 Центр Столярных Изделий. Все права защищены.</p>
                         </div>

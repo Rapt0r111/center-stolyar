@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { cn } from '@/lib/utils';
-
+import Image from 'next/image';
 const STATS = [
   { value: 16, suffix: '+', label: 'лет опыта', sublabel: 'с 2008 года' },
   { value: 500, suffix: '+', label: 'проектов', sublabel: 'выполнено' },
@@ -106,7 +106,18 @@ export default function AboutSection() {
                   Каждая деталь — это результат мастерства, уважения к материалу и внимания к пожеланиям клиента.
                 </p>
                 <div className="flex items-center gap-4">
-                  <div className="w-10 h-10 rounded-full bg-[#c8a96e] flex items-center justify-center text-[#1a1008] font-bold text-sm">ЦСИ</div>
+
+                  <div className="relative w-30 h-20 flex items-center justify-center">
+                    <Image
+                      src="/images/logo-black.png"
+                      alt="ЦСИ Логотип"
+                      width={100}
+                      height={80}
+                      className="object-contain transition-transform group-hover:scale-110"
+                      priority // Добавляем priority, так как это LCP элемент (лого в шапке)
+                    />
+                  </div>
+
                   <div>
                     <p className="text-white font-semibold text-sm">Центр Столярных Изделий</p>
                     <p className="text-[#c8a96e] text-xs">г. Санкт-Петербург</p>
