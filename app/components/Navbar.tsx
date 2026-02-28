@@ -8,6 +8,7 @@ import { cn } from '@/lib/utils';
 const NAV_LINKS = [
   { label: 'О Компании', id: 'about' },
   { label: 'Галерея', id: 'gallery' },
+  { label: 'Полезные материалы', id: 'articles' },
   { label: 'Виды Работ', id: 'services' },
   { label: 'Связь с Центром', id: 'contact' },
   { label: 'Карта', id: 'map' },

@@ -45,7 +45,7 @@ export default function ContactSection() {
   };
 
   return (
-    <section id="contact" className="py-24 lg:py-32 bg-[#f5f0e8] relative overflow-hidden">
+    <section id="contact" className="py-16 lg:py-32 bg-[#f5f0e8] relative overflow-hidden">
       {/* Accents */}
       <div className="absolute top-0 right-0 w-80 h-80 opacity-10 pointer-events-none"
         style={{ background: 'radial-gradient(circle, #c8a96e, transparent 70%)' }} />

@@ -1,116 +1,186 @@
 'use client';
 
-import { ArrowRight, Calendar } from 'lucide-react';
+import { ArrowRight, Calendar, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import Image from 'next/image';
 import { cn } from '@/lib/utils';
 
-// Обновленный массив: добавлено поле image
+import { Swiper, SwiperSlide } from 'swiper/react';
+import { Navigation, Autoplay, EffectCoverflow } from 'swiper/modules';
+import type { Swiper as SwiperType } from 'swiper';
+
+import 'swiper/css';
+import 'swiper/css/navigation';
+import 'swiper/css/effect-coverflow';
+
 const ARTICLES = [
   {
+    id: 1,
     date: '15 января 2026',
     tag: 'Материалы',
     title: 'Металлические ограждения лестниц из нержавеющей стали',
     excerpt: 'Нержавеющая сталь в сочетании с деревом — один из самых популярных запросов 2026 года. Рассказываем о видах и преимуществах.',
-    color: '#5c3d1e',
-    image: '/images/article-1.jpeg', // Путь к первому фото (кованые перила)
+    image: '/images/article-1.jpeg',
   },
   {
+    id: 2,
     date: '8 декабря 2025',
     tag: 'Дизайн',
     title: 'Тренды деревянных интерьеров: что актуально в 2026 году',
     excerpt: 'Натуральные фактуры, тёмные породы дерева и смешение стилей — разбираем главные тенденции в оформлении жилых пространств.',
-    color: '#3d2b1f',
-    image: '/images/article-2.jpeg', // Путь ко второму фото (витрины и стол)
+    image: '/images/article-2.jpeg',
   },
   {
+    id: 3,
     date: '22 ноября 2025',
     tag: 'Советы',
     title: 'Как выбрать породу дерева для лестницы: дуб, ясень или бук?',
     excerpt: 'Сравниваем три самые популярные породы для лестниц по прочности, внешнему виду и цене. Помогаем сделать правильный выбор.',
-    color: '#4a3020',
-    image: '/images/article-3.jpeg', // Путь к третьему фото (ступени на металлокаркасе)
+    image: '/images/article-3.jpeg',
   },
 ];
 
 export default function ArticlesSection() {
-  const ref = useRef<HTMLElement>(null);
+  const sectionRef = useRef<HTMLElement>(null);
   const [visible, setVisible] = useState(false);
+  const swiperRef = useRef<SwiperType | null>(null);
 
   useEffect(() => {
-    const obs = new IntersectionObserver(([e]) => { if (e.isIntersecting) setVisible(true); }, { threshold: 0.1 });
-    if (ref.current) obs.observe(ref.current);
+    const obs = new IntersectionObserver(
+      ([e]) => {
+        if (e.isIntersecting) setVisible(true);
+      },
+      { threshold: 0.1 }
+    );
+    if (sectionRef.current) obs.observe(sectionRef.current);
     return () => obs.disconnect();
   }, []);
 
   return (
-    <section id="articles" ref={ref} className="py-24 lg:py-32"
-      style={{ background: 'linear-gradient(180deg, #1a1008 0%, #2a1d12 100%)' }}>
+    <section
+      id="articles"
+      ref={sectionRef}
+      className="py-16 lg:py-32 overflow-hidden"
+      style={{ background: 'linear-gradient(180deg, #1a1008 0%, #2a1d12 100%)' }}
+    >
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        {/* Header */}
-        <div className="flex items-center gap-4 mb-4">
-          <div className="w-12 h-px bg-[#c8a96e]" />
-          <span className="text-[#c8a96e] text-xs tracking-widest uppercase font-medium">Статьи</span>
+        
+        {/* Header: Заголовок + Ссылка на все статьи */}
+        <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-12">
+          <div>
+            <div className="flex items-center gap-4 mb-4">
+              <div className="w-12 h-px bg-[#c8a96e]" />
+              <span className="text-[#c8a96e] text-xs tracking-widest uppercase font-medium">Блог</span>
+            </div>
+            <h2 className="text-4xl lg:text-5xl font-bold text-white leading-tight" style={{ fontFamily: 'Georgia, serif' }}>
+              Полезные <span className="text-[#c8a96e]">материалы</span>
+            </h2>
+          </div>
+
+          <div className="flex items-center gap-6">
+            <button className="text-[#c8a96e] text-sm hover:text-[#d4b87e] flex items-center gap-2 group transition-colors whitespace-nowrap">
+              Все статьи <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+            </button>
+          </div>
         </div>
-        <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4 mb-12">
-          <h2 className="text-4xl lg:text-5xl font-bold text-white leading-tight"
-            style={{ fontFamily: 'Georgia, serif' }}>
-            Полезные <span className="text-[#c8a96e]">материалы</span>
-          </h2>
-          <button className="text-[#c8a96e] text-sm hover:text-[#d4b87e] flex items-center gap-2 group transition-colors">
-            Все статьи <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+
+        {/* Контейнер для слайдера со стрелками */}
+        <div
+          className={cn(
+            'relative transition-all duration-1000 ease-out',
+            visible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'
+          )}
+        >
+          
+          {/* Левая стрелка */}
+          <button
+            onClick={() => swiperRef.current?.slidePrev()}
+            className="absolute left-0 lg:-left-12 top-1/2 -translate-y-1/2 z-20 w-12 h-12 lg:w-16 lg:h-16 rounded-full border border-[#c8a96e]/30 bg-[#1a1008]/40 backdrop-blur-md flex items-center justify-center text-[#c8a96e] hover:bg-[#c8a96e] hover:text-[#1a1008] transition-all duration-500 group shadow-2xl"
+          >
+            <ChevronLeft className="w-6 h-6 lg:w-8 lg:h-8 group-hover:-translate-x-1 transition-transform" />
           </button>
-        </div>
 
-        <div className="grid md:grid-cols-3 gap-6">
-          {ARTICLES.map((a, i) => (
-            <article
-              key={a.title}
-              className={cn(
-                'group relative rounded-2xl overflow-hidden transition-all duration-500 hover:-translate-y-1 hover:shadow-[0_20px_60px_rgba(0,0,0,0.4)] cursor-pointer flex flex-col',
-                visible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'
-              )}
-              style={{
-                transitionDelay: `${i * 100}ms`,
-                background: 'rgba(255,255,255,0.04)',
-                border: '1px solid rgba(200,169,110,0.12)',
-              }}
-            >
-              {/* Color bar top */}
+          {/* Правая стрелка */}
+          <button
+            onClick={() => swiperRef.current?.slideNext()}
+            className="absolute right-0 lg:-right-12 top-1/2 -translate-y-1/2 z-20 w-12 h-12 lg:w-16 lg:h-16 rounded-full border border-[#c8a96e]/30 bg-[#1a1008]/40 backdrop-blur-md flex items-center justify-center text-[#c8a96e] hover:bg-[#c8a96e] hover:text-[#1a1008] transition-all duration-500 group shadow-2xl"
+          >
+            <ChevronRight className="w-6 h-6 lg:w-8 lg:h-8 group-hover:translate-x-1 transition-transform" />
+          </button>
 
-              {/* Изображение статьи */}
-              <div className="h-56 relative overflow-hidden w-full">
-                <Image
-                  src={a.image}
-                  alt={a.title}
-                  fill
-                  className="object-cover transition-transform duration-700 group-hover:scale-105"
-                  sizes="(max-width: 768px) 100vw, (max-width: 1200px) 33vw, 400px"
-                />
-                {/* Легкий градиент поверх картинки, чтобы она мягче вписывалась в темный дизайн */}
-                <div className="absolute inset-0 bg-gradient-to-t from-[#2a1d12]/80 via-transparent to-transparent opacity-80" />
-              </div>
+          <Swiper
+            modules={[Navigation, Autoplay, EffectCoverflow]}
+            onSwiper={(swiper) => (swiperRef.current = swiper)}
+            effect="coverflow"
+            grabCursor={true}
+            centeredSlides={true}
+            slidesPerView="auto"
+            loop={true}
+            slideToClickedSlide={true}
+            coverflowEffect={{
+              rotate: 0,
+              stretch: 0,
+              depth: 150,
+              modifier: 2,
+              slideShadows: false,
+            }}
+            autoplay={{
+              delay: 4000,
+              disableOnInteraction: false,
+            }}
+          >
+            {ARTICLES.map((a) => (
+              <SwiperSlide 
+                key={a.id} 
+                className="!w-[85%] sm:!w-[420px] h-auto [&.swiper-slide]:transition-all [&.swiper-slide]:duration-700 [&:not(.swiper-slide-active)]:opacity-30 [&:not(.swiper-slide-active)]:blur-[4px] [&:not(.swiper-slide-active)]:scale-90"
+              >
+                <article className={cn(
+                  "group relative h-full rounded-3xl overflow-hidden flex flex-col transition-all duration-500 cursor-pointer shadow-2xl border border-white/5",
+                  "bg-[#1a1008]/80 backdrop-blur-xl border-[#c8a96e]/10 hover:border-[#c8a96e]/30"
+                )}>
+                  
+                  {/* Изображение статьи */}
+                  <div className="h-64 relative overflow-hidden w-full">
+                    <Image
+                      src={a.image}
+                      alt={a.title}
+                      fill
+                      className="object-cover transition-transform duration-1000 group-hover:scale-110"
+                      sizes="(max-width: 768px) 100vw, 420px"
+                    />
+                    <div className="absolute inset-0 bg-gradient-to-t from-[#1a1008] via-transparent to-transparent opacity-90" />
+                    
+                    <div className="absolute top-4 right-4 bg-black/40 backdrop-blur-md px-3 py-1 rounded-full border border-white/10 flex items-center gap-1.5 text-[10px] text-white/90 font-medium uppercase tracking-wider">
+                      <Calendar className="w-3 h-3 text-[#c8a96e]" /> {a.date}
+                    </div>
+                  </div>
 
-              <div className="p-6 flex-grow flex flex-col">
-                <div className="flex items-center gap-3 mb-4">
-                  <span className="px-2.5 py-0.5 rounded-full bg-[#c8a96e]/15 text-[#c8a96e] text-xs font-medium border border-[#c8a96e]/20">
-                    {a.tag}
-                  </span>
-                  <span className="flex items-center gap-1.5 text-white/30 text-xs">
-                    <Calendar className="w-3 h-3" /> {a.date}
-                  </span>
-                </div>
-                <h3 className="text-white font-semibold text-base leading-snug mb-3 group-hover:text-[#c8a96e] transition-colors line-clamp-2">
-                  {a.title}
-                </h3>
-                <p className="text-white/40 text-sm leading-relaxed mb-6 line-clamp-3 flex-grow">{a.excerpt}</p>
-                <button className="flex items-center gap-2 text-[#c8a96e] text-sm font-medium group/btn hover:text-[#d4b87e] transition-colors mt-auto w-fit">
-                  Подробнее
-                  <ArrowRight className="w-3.5 h-3.5 group-hover/btn:translate-x-1 transition-transform" />
-                </button>
-              </div>
-            </article>
-          ))}
+                  <div className="p-8 flex-grow flex flex-col relative -mt-8 bg-gradient-to-b from-transparent to-[#1a1008]">
+                    <div className="mb-4">
+                      <span className="inline-block px-3 py-1 rounded-full bg-[#c8a96e] text-[#1a1008] text-[10px] font-bold tracking-[0.15em] uppercase shadow-lg shadow-[#c8a96e]/20">
+                        {a.tag}
+                      </span>
+                    </div>
+
+                    <h3 className="text-white font-semibold text-xl lg:text-2xl leading-snug mb-4 group-hover:text-[#c8a96e] transition-colors" style={{ fontFamily: 'Georgia, serif' }}>
+                      {a.title}
+                    </h3>
+                    
+                    <p className="text-white/50 text-sm leading-relaxed mb-8 line-clamp-3 flex-grow">
+                      {a.excerpt}
+                    </p>
+                    
+                    <div className="mt-auto border-t border-white/5 pt-5 flex items-center justify-between">
+                      <span className="text-[#c8a96e] text-sm font-bold uppercase tracking-widest group-hover:text-[#d4b87e] transition-colors flex items-center gap-2">
+                        Читать полностью
+                        <ArrowRight className="w-4 h-4 opacity-0 -translate-x-2 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-300" />
+                      </span>
+                    </div>
+                  </div>
+                </article>
+              </SwiperSlide>
+            ))}
+          </Swiper>
         </div>
       </div>
     </section>

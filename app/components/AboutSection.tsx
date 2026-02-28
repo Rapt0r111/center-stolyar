@@ -50,7 +50,7 @@ export default function AboutSection() {
   }, []);
 
   return (
-    <section id="about" ref={ref} className="relative py-24 lg:py-32 bg-[#f5f0e8] overflow-hidden">
+    <section id="about" ref={ref} className="relative py-16 lg:py-32 bg-[#f5f0e8] overflow-hidden">
       {/* Background accent */}
       <div className="absolute top-0 right-0 w-1/2 h-full opacity-5 pointer-events-none"
         style={{ background: 'radial-gradient(ellipse at top right, #c8a96e 0%, transparent 70%)' }} />
