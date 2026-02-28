@@ -53,7 +53,7 @@ export default function GalleryCompact() {
     <section
       id="gallery"
       ref={sectionRef}
-      className="py-16 lg:py-32 overflow-hidden"
+      className="py-16 lg:py-20 overflow-hidden"
       style={{ background: 'linear-gradient(180deg, #1a1008 0%, #2a1d12 100%)' }}
     >
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">

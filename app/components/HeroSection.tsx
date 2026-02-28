@@ -131,7 +131,7 @@ export default function HeroSection({ onCta }: HeroSectionProps) {
       {/* Vertical accent line */}
       <div className="absolute left-8 top-1/4 bottom-1/4 w-px bg-gradient-to-b from-transparent via-[#c8a96e]/40 to-transparent hidden xl:block" />
 
-      <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-24 pb-32 md:pb-40">
+      <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-24 pb-16 md:pb-20">
         <div className="max-w-4xl">
           {/* Badge */}
           <div

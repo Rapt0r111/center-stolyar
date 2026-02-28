@@ -1,26 +1,106 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+/* ─── Design Tokens (Tailwind v4 @theme) ─────────────────────────────────── */
+@theme {
+  /* Brand palette */
+  --color-gold:        #c8a96e;
+  --color-gold-light:  #d4b87e;
+  --color-gold-dim:    color-mix(in oklch, #c8a96e 15%, transparent);
+  --color-wood-dark:   #1a1008;
+  --color-wood-mid:    #3d2b1f;
+  --color-wood-deep:   #2a1d12;
+  --color-cream:       #f5f0e8;
+
+  /* Typography */
+  --font-serif:  Georgia, "Times New Roman", serif;
+  --font-sans:   var(--font-geist-sans), Arial, Helvetica, sans-serif;
+  --font-mono:   var(--font-geist-mono), monospace;
+
+  /* Spacing scale additions */
+  --spacing-18: 4.5rem;
+  --spacing-22: 5.5rem;
+
+  /* Animation */
+  --ease-spring:   cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-out-expo: cubic-bezier(0.19, 1, 0.22, 1);
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
+/* ─── Base reset ─────────────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+html {
+  scroll-behavior: smooth;
+  /* Prevent layout shift from scrollbar */
+  scrollbar-gutter: stable;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--color-wood-dark);
+  color: white;
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ─── Custom scrollbar ───────────────────────────────────────────────────── */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: var(--color-wood-dark); }
+::-webkit-scrollbar-thumb {
+  background: color-mix(in oklch, var(--color-gold) 40%, transparent);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover { background: var(--color-gold); }
+
+/* ─── Grainy texture utility ─────────────────────────────────────────────── */
+@layer utilities {
+  .grain {
+    position: relative;
+  }
+  .grain::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    opacity: 0.035;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4'/%3E%3C/filter%3E%3Crect width='200' height='200' filter='url(%23n)'/%3E%3C/svg%3E");
+    background-size: 150px;
+  }
+
+  /* Glass morphism card */
+  .glass {
+    background: color-mix(in oklch, white 4%, transparent);
+    border: 1px solid color-mix(in oklch, white 10%, transparent);
+    backdrop-filter: blur(12px) saturate(180%);
+    -webkit-backdrop-filter: blur(12px) saturate(180%);
+  }
+
+  /* Gold glow */
+  .glow-gold {
+    box-shadow: 0 0 40px color-mix(in oklch, var(--color-gold) 30%, transparent);
+  }
+
+  /* Text gradient */
+  .text-gradient-gold {
+    background: linear-gradient(135deg, var(--color-gold), var(--color-gold-light));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+}
+
+/* ─── Fade-slide animation ───────────────────────────────────────────────── */
+@keyframes fade-slide-in {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ─── Swiper overrides ───────────────────────────────────────────────────── */
+.swiper-slide {
+  transition: opacity 0.7s var(--ease-spring),
+              filter  0.7s var(--ease-spring),
+              transform 0.7s var(--ease-spring);
+}
+.swiper-slide:not(.swiper-slide-active) {
+  opacity: 0.3;
+  filter: blur(4px);
+  transform: scale(0.9);
 }

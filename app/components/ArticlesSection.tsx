@@ -60,12 +60,12 @@ export default function ArticlesSection() {
     <section
       id="articles"
       ref={sectionRef}
-      className="py-16 lg:py-32 overflow-hidden"
+      className="py-16 lg:py-20 overflow-hidden"
       style={{ background: 'linear-gradient(180deg, #1a1008 0%, #2a1d12 100%)' }}
     >
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         
-        {/* Header: Заголовок + Ссылка на все статьи */}
+        {/* Header */}
         <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-12">
           <div>
             <div className="flex items-center gap-4 mb-4">
@@ -84,7 +84,6 @@ export default function ArticlesSection() {
           </div>
         </div>
 
-        {/* Контейнер для слайдера со стрелками */}
         <div
           className={cn(
             'relative transition-all duration-1000 ease-out',
@@ -92,18 +91,17 @@ export default function ArticlesSection() {
           )}
         >
           
-          {/* Левая стрелка */}
+          {/* Навигация */}
           <button
             onClick={() => swiperRef.current?.slidePrev()}
-            className="absolute left-0 lg:-left-12 top-1/2 -translate-y-1/2 z-20 w-12 h-12 lg:w-16 lg:h-16 rounded-full border border-[#c8a96e]/30 bg-[#1a1008]/40 backdrop-blur-md flex items-center justify-center text-[#c8a96e] hover:bg-[#c8a96e] hover:text-[#1a1008] transition-all duration-500 group shadow-2xl"
+            className="absolute left-0 lg:-left-12 top-1/2 -translate-y-1/2 z-20 w-12 h-12 lg:w-16 lg:h-16 rounded-full border border-[#c8a96e]/30 bg-[#1a1008]/40 backdrop-blur-md flex items-center justify-center text-[#c8a96e] hover:bg-[#c8a96e] hover:text-[#1a1008] transition-all duration-500 group shadow-2xl disabled:opacity-30 disabled:cursor-not-allowed"
           >
             <ChevronLeft className="w-6 h-6 lg:w-8 lg:h-8 group-hover:-translate-x-1 transition-transform" />
           </button>
 
-          {/* Правая стрелка */}
           <button
             onClick={() => swiperRef.current?.slideNext()}
-            className="absolute right-0 lg:-right-12 top-1/2 -translate-y-1/2 z-20 w-12 h-12 lg:w-16 lg:h-16 rounded-full border border-[#c8a96e]/30 bg-[#1a1008]/40 backdrop-blur-md flex items-center justify-center text-[#c8a96e] hover:bg-[#c8a96e] hover:text-[#1a1008] transition-all duration-500 group shadow-2xl"
+            className="absolute right-0 lg:-right-12 top-1/2 -translate-y-1/2 z-20 w-12 h-12 lg:w-16 lg:h-16 rounded-full border border-[#c8a96e]/30 bg-[#1a1008]/40 backdrop-blur-md flex items-center justify-center text-[#c8a96e] hover:bg-[#c8a96e] hover:text-[#1a1008] transition-all duration-500 group shadow-2xl disabled:opacity-30 disabled:cursor-not-allowed"
           >
             <ChevronRight className="w-6 h-6 lg:w-8 lg:h-8 group-hover:translate-x-1 transition-transform" />
           </button>
@@ -115,31 +113,33 @@ export default function ArticlesSection() {
             grabCursor={true}
             centeredSlides={true}
             slidesPerView="auto"
-            loop={true}
+            loop={false} // ОТКЛЮЧЕНО
+            watchSlidesProgress={true} // Улучшает производительность анимаций
             slideToClickedSlide={true}
             coverflowEffect={{
               rotate: 0,
               stretch: 0,
-              depth: 150,
-              modifier: 2,
+              depth: 100,
+              modifier: 2.5,
               slideShadows: false,
             }}
             autoplay={{
-              delay: 4000,
-              disableOnInteraction: false,
+              delay: 5000,
+              disableOnInteraction: true,
             }}
+            className="!overflow-visible"
           >
             {ARTICLES.map((a) => (
               <SwiperSlide 
                 key={a.id} 
-                className="!w-[85%] sm:!w-[420px] h-auto [&.swiper-slide]:transition-all [&.swiper-slide]:duration-700 [&:not(.swiper-slide-active)]:opacity-30 [&:not(.swiper-slide-active)]:blur-[4px] [&:not(.swiper-slide-active)]:scale-90"
+                // Убрали transition-all отсюда, чтобы не было дерганья
+                className="!w-[85%] sm:!w-[420px] h-auto transition-opacity duration-500 [&:not(.swiper-slide-active)]:opacity-40 [&:not(.swiper-slide-active)]:blur-[2px]"
               >
                 <article className={cn(
                   "group relative h-full rounded-3xl overflow-hidden flex flex-col transition-all duration-500 cursor-pointer shadow-2xl border border-white/5",
                   "bg-[#1a1008]/80 backdrop-blur-xl border-[#c8a96e]/10 hover:border-[#c8a96e]/30"
                 )}>
                   
-                  {/* Изображение статьи */}
                   <div className="h-64 relative overflow-hidden w-full">
                     <Image
                       src={a.image}

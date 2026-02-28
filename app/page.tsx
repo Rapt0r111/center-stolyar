@@ -1,44 +1,44 @@
 'use client';
 
-import Navbar from '@/app/components/Navbar';
-import HeroSection from '@/app/components/HeroSection';
-import AboutSection from '@/app/components/AboutSection';
+import { useCallback } from 'react';
+import Navbar          from '@/app/components/Navbar';
+import HeroSection     from '@/app/components/HeroSection';
+import AboutSection    from '@/app/components/AboutSection';
 import ServicesSection from '@/app/components/ServicesSection';
-import GallerySection from '@/app/components/GallerySection';
+import GallerySection  from '@/app/components/GallerySection';
 import ArticlesSection from '@/app/components/ArticlesSection';
-import ContactSection from '@/app/components/ContactSection';
-import FooterSection from '@/app/components/FooterSection';
+import ContactSection  from '@/app/components/ContactSection';
+import FooterSection   from '@/app/components/FooterSection';
 
-const globalStyles = `
-@keyframes fadeSlideIn {
-  from { opacity: 0; transform: translateY(8px); }
-  to   { opacity: 1; transform: translateY(0); }
-}
-html { scroll-behavior: smooth; }
-* { box-sizing: border-box; }
-`;
-
-function App() {
-  const scrollTo = (id: string) => {
+export default function HomePage() {
+  // Smooth scroll — memoised so child components don't re-render on unrelated state
+  const scrollTo = useCallback((id: string) => {
     const el = document.getElementById(id);
-    if (el) el.scrollIntoView({ behavior: 'smooth' });
-  };
+    if (!el) return;
+
+    // Use View Transition API when available (Chrome 111+)
+    if ('startViewTransition' in document) {
+      (document as Document & { startViewTransition: (cb: () => void) => void })
+        .startViewTransition(() => {
+          el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        });
+    } else {
+      el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  }, []);
 
   return (
     <div className="min-h-screen bg-[#1a1008] font-sans">
-      <style>{globalStyles}</style>
       <Navbar onNavClick={scrollTo} />
       <main>
-        <HeroSection onCta={() => scrollTo('contact')} />
-        <AboutSection />
+        <HeroSection     onCta={() => scrollTo('contact')} />
+        <AboutSection    />
         <ServicesSection />
-        <GallerySection />
+        <GallerySection  />
         <ArticlesSection />
-        <ContactSection />
-        <FooterSection />
+        <ContactSection  />
+        <FooterSection   />
       </main>
     </div>
   );
 }
-
-export default App;
