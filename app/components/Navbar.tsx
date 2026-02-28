@@ -226,7 +226,7 @@ export default function Navbar({ onNavClick }: { onNavClick: (id: string) => voi
         <div
           className={cn(
             'absolute inset-0 transition-all duration-500 ease-in-out',
-            scrolled ? 'bg-[#150c04]/90 backdrop-blur-md border-b border-[#c8a96e]/20' : 'bg-transparent'
+            scrolled ? 'bg-[#150c04]/90 backdrop-blur-md' : 'bg-transparent'
           )}
         />
 
