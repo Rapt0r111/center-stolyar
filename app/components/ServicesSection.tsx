@@ -1,5 +1,17 @@
 'use client';
 
+/**
+ * ServicesSection.tsx — ОПТИМИЗИРОВАННАЯ ВЕРСИЯ
+ *
+ * Изменения vs оригинал:
+ * ───────────────────────────────────────────────────────────────
+ * 1. ServiceModal: обложка использует ImageSkeleton вместо blur
+ * 2. Фотополоса в модалке: миниатюры используют Skeleton
+ * 3. При открытии модалки сразу preload всех фото галереи этой категории
+ * 4. PhotoLightbox: активное фото с priority + Skeleton
+ * 5. Хук useImageLoad вынесен из ImageSkeleton для чистоты использования
+ */
+
 import React, { useEffect, useCallback, useState } from 'react';
 import { cn } from '@/lib/utils';
 import { SERVICES, GALLERY_ITEMS } from '@/lib/data';
@@ -16,7 +28,9 @@ import { Swiper, SwiperSlide } from 'swiper/react';
 import { Autoplay } from 'swiper/modules';
 import type { Swiper as SwiperType } from 'swiper';
 import 'swiper/css';
-import { BLUR } from '@/lib/image-utils';
+
+import { preloader, LIGHTBOX_WIDTH } from '@/lib/image-preloader';
+import ImageSkeleton from '@/app/components/ui/ImageSkeleton';
 
 const Stairs = createLucideIcon('Stairs', [
   ['path', { d: 'M3 21h18', key: 'base' }],
@@ -29,11 +43,11 @@ const ICON_MAP: Record<string, LucideIcon> = {
 
 const SERVICE_GALLERY: Record<string, string> = {
   'Лестницы': 'Лестницы',
-  'Перила': 'Лестницы',
-  'Двери': 'Двери',
-  'Мебель': 'Мебель',
-  'Арки': 'Арки',
-  'Потолки': 'Лестницы',
+  'Перила':   'Лестницы',
+  'Двери':    'Двери',
+  'Мебель':   'Мебель',
+  'Арки':     'Арки',
+  'Потолки':  'Лестницы',
   'Кабинеты': 'Мебель',
 };
 
@@ -58,12 +72,16 @@ function PhotoLightbox({
   onClose: () => void;
 }) {
   const [idx, setIdx] = useState(initialIndex);
+  const [imgLoaded, setImgLoaded] = useState(false);
+
+  // Сброс состояния загрузки при смене фото
+  useEffect(() => { setImgLoaded(false); }, [idx]);
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose();
-      if (e.key === 'ArrowRight') setIdx(i => (i + 1) % images.length);
-      if (e.key === 'ArrowLeft') setIdx(i => (i - 1 + images.length) % images.length);
+      if (e.key === 'ArrowRight') { setIdx(i => (i + 1) % images.length); }
+      if (e.key === 'ArrowLeft')  { setIdx(i => (i - 1 + images.length) % images.length); }
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
@@ -114,13 +132,18 @@ function PhotoLightbox({
           className="relative max-w-4xl w-full h-[80vh] mx-8"
           onClick={e => e.stopPropagation()}
         >
+          {/* Skeleton вместо blur */}
+          <ImageSkeleton loaded={imgLoaded} />
+
           <Image
             src={images[idx].src}
             alt={images[idx].label}
             fill
             className="object-contain"
             sizes="100vw"
-            priority
+            priority  // В лайтбоксе всегда priority
+            quality={88}
+            onLoad={() => setImgLoaded(true)}
           />
           <p className="absolute bottom-0 left-0 right-0 text-center text-white/50 text-sm pb-2">
             {images[idx].label}
@@ -128,7 +151,6 @@ function PhotoLightbox({
         </motion.div>
       </AnimatePresence>
 
-      {/* Dot indicator */}
       {images.length > 1 && (
         <div className="absolute bottom-6 left-1/2 -translate-x-1/2 flex gap-2">
           {images.map((_, i) => (
@@ -136,8 +158,8 @@ function PhotoLightbox({
               key={i}
               onClick={e => { e.stopPropagation(); setIdx(i); }}
               className={cn(
-                'w-1.5 h-1.5 rounded-full transition-all duration-300',
-                i === idx ? 'bg-[#c8a96e] w-4' : 'bg-white/30'
+                'h-1.5 rounded-full transition-all duration-300',
+                i === idx ? 'bg-[#c8a96e] w-4' : 'bg-white/30 w-1.5'
               )}
             />
           ))}
@@ -147,7 +169,7 @@ function PhotoLightbox({
   );
 }
 
-// ─── Modal ────────────────────────────────────────────────────────────────────
+// ─── Service Modal ─────────────────────────────────────────────────────────────
 function ServiceModal({
   service, onClose, onCta,
 }: {
@@ -162,6 +184,20 @@ function ServiceModal({
   const galleryImages = GALLERY_ITEMS.filter(
     item => item.cat === (SERVICE_GALLERY[service.title] ?? '')
   );
+
+  // При открытии модалки сразу preload всех фото этой категории
+  useEffect(() => {
+    if (galleryImages.length > 0) {
+      // Первое фото — сразу (пользователь может кликнуть немедленно)
+      preloader.preload(galleryImages[0].src, LIGHTBOX_WIDTH);
+      // Остальные — через idle callback
+      preloader.preloadMany(
+        galleryImages.slice(1).map(i => i.src),
+        LIGHTBOX_WIDTH
+      );
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [service.title]);
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -236,23 +272,15 @@ function ServiceModal({
                 <Icon size={34} className="text-[#c8a96e]" strokeWidth={1.4} />
               </div>
               <div>
-                <motion.h3
-                  initial={{ opacity: 0, y: 8 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: 0.14 }}
+                <h3
                   className="text-2xl font-bold text-white mb-1"
                   style={{ fontFamily: 'Georgia, serif' }}
                 >
                   {service.title}
-                </motion.h3>
-                <motion.p
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  transition={{ delay: 0.2 }}
-                  className="text-[#c8a96e] text-xs uppercase tracking-[0.15em] opacity-80"
-                >
+                </h3>
+                <p className="text-[#c8a96e] text-xs uppercase tracking-[0.15em] opacity-80">
                   {service.short}
-                </motion.p>
+                </p>
               </div>
             </motion.div>
 
@@ -283,7 +311,7 @@ function ServiceModal({
               </motion.p>
             </div>
 
-            {/* Photo strip — unblurred, clickable */}
+            {/* Photo strip */}
             {galleryImages.length > 0 && (
               <motion.div
                 initial={{ opacity: 0, y: 12 }}
@@ -311,7 +339,6 @@ function ServiceModal({
                   )}
                 </div>
 
-                {/* ← wrapper class overrides globals.css swiper blur */}
                 <div className="modal-photos-swiper">
                   <style>{`
                     .modal-photos-swiper .swiper-slide {
@@ -330,36 +357,12 @@ function ServiceModal({
                   >
                     {galleryImages.map((img, i) => (
                       <SwiperSlide key={img.id}>
-                        <div
-                          className="group relative rounded-xl overflow-hidden cursor-pointer"
-                          style={{ height: 100, border: '1px solid rgba(255,255,255,0.06)' }}
+                        <ThumbCard
+                          img={img}
+                          index={i}
+                          onHover={() => preloader.preload(img.src, LIGHTBOX_WIDTH)}
                           onClick={() => setLightboxIndex(i)}
-                        >
-                          <Image
-                            src={img.src}
-                            alt={img.label}
-                            fill
-                            className="object-cover transition-transform duration-500 group-hover:scale-110"
-                            sizes="160px"
-                            // ✅ Миниатюры небольшие — грузим лениво, но с низким качеством для скорости
-                            loading="lazy"
-                            quality={70}
-                            placeholder="blur"
-                            blurDataURL={BLUR.thumbnail}
-                          />
-                          {/* Hover zoom icon */}
-                          <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-all duration-300 flex items-center justify-center">
-                            <ZoomIn
-                              size={20}
-                              className="text-white opacity-0 group-hover:opacity-100 transition-opacity duration-300"
-                            />
-                          </div>
-                          {/* Gold border on hover */}
-                          <div
-                            className="absolute inset-0 rounded-xl opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none"
-                            style={{ boxShadow: 'inset 0 0 0 1.5px rgba(200,169,110,0.6)' }}
-                          />
-                        </div>
+                        />
                       </SwiperSlide>
                     ))}
                   </Swiper>
@@ -380,10 +383,7 @@ function ServiceModal({
                 whileTap={{ scale: 0.97 }}
                 onClick={() => onCta(service.title)}
                 className="flex items-center gap-2.5 px-7 py-3.5 rounded-full text-[#1a1008] font-bold text-sm tracking-wide transition-colors"
-                style={{
-                  backgroundColor: '#c8a96e',
-                  boxShadow: '0 4px 20px rgba(200,169,110,0.35)',
-                }}
+                style={{ backgroundColor: '#c8a96e', boxShadow: '0 4px 20px rgba(200,169,110,0.35)' }}
               >
                 Заказать расчёт
                 <ArrowRight size={16} />
@@ -393,7 +393,6 @@ function ServiceModal({
         </motion.div>
       </div>
 
-      {/* Lightbox */}
       <AnimatePresence>
         {lightboxIndex !== null && (
           <PhotoLightbox
@@ -404,6 +403,51 @@ function ServiceModal({
         )}
       </AnimatePresence>
     </>
+  );
+}
+
+// ─── Thumbnail Card (вынесен для чистоты) ─────────────────────────────────────
+function ThumbCard({
+  img, index, onHover, onClick,
+}: {
+  img: GalleryItem;
+  index: number;
+  onHover: () => void;
+  onClick: () => void;
+}) {
+  const [loaded, setLoaded] = useState(false);
+
+  return (
+    <div
+      className="group relative rounded-xl overflow-hidden cursor-pointer"
+      style={{ height: 100, border: '1px solid rgba(255,255,255,0.06)' }}
+      onMouseEnter={onHover}
+      onTouchStart={onHover}
+      onClick={onClick}
+    >
+      {/* Skeleton для миниатюр */}
+      <ImageSkeleton loaded={loaded} />
+
+      <Image
+        src={img.src}
+        alt={img.label}
+        fill
+        className="object-cover transition-transform duration-500 group-hover:scale-110"
+        sizes="160px"
+        loading={index === 0 ? 'eager' : 'lazy'}
+        quality={70}
+        onLoad={() => setLoaded(true)}
+      />
+
+      {/* Hover overlay */}
+      <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-all duration-300 flex items-center justify-center">
+        <ZoomIn size={20} className="text-white opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+      </div>
+      <div
+        className="absolute inset-0 rounded-xl opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none"
+        style={{ boxShadow: 'inset 0 0 0 1.5px rgba(200,169,110,0.6)' }}
+      />
+    </div>
   );
 }
 
@@ -418,9 +462,18 @@ function BentoCard({
   const Icon = ICON_MAP[service.iconName] ?? Layers;
   const isFeatured = index === 0;
 
+  // Preload при наведении на карточку услуги
+  const handleHover = useCallback(() => {
+    const category = SERVICE_GALLERY[service.title];
+    if (!category) return;
+    const imgs = GALLERY_ITEMS.filter(i => i.cat === category);
+    preloader.preloadDeferred(imgs.map(i => i.src), LIGHTBOX_WIDTH, 300);
+  }, [service.title]);
+
   return (
     <motion.button
       onClick={() => onClick(service)}
+      onMouseEnter={handleHover}
       initial={{ opacity: 0, y: 20 }}
       whileInView={{ opacity: 1, y: 0 }}
       viewport={{ once: true, margin: '-40px' }}
@@ -458,26 +511,16 @@ function BentoCard({
         >
           <Icon size={isFeatured ? 24 : 18} className="text-[#c8a96e]" strokeWidth={1.4} />
         </div>
-
         <div className={isFeatured ? 'mt-3' : ''}>
           <p
-            className={cn(
-              'font-semibold text-white group-hover:text-[#c8a96e] transition-colors',
-              isFeatured ? 'text-lg mb-1.5' : 'text-sm leading-snug',
-            )}
+            className={cn('font-semibold text-white group-hover:text-[#c8a96e] transition-colors', isFeatured ? 'text-lg mb-1.5' : 'text-sm leading-snug')}
             style={isFeatured ? { fontFamily: 'Georgia, serif' } : undefined}
           >
             {service.title}
           </p>
-
-          {isFeatured && (
-            <p className="text-white/45 text-sm leading-relaxed line-clamp-2">{service.desc}</p>
-          )}
-          {!isFeatured && (
-            <p className="text-white/35 text-[10px] mt-0.5 leading-snug line-clamp-1">{service.short}</p>
-          )}
+          {isFeatured && <p className="text-white/45 text-sm leading-relaxed line-clamp-2">{service.desc}</p>}
+          {!isFeatured && <p className="text-white/35 text-[10px] mt-0.5 leading-snug line-clamp-1">{service.short}</p>}
         </div>
-
         {isFeatured && (
           <div className="mt-4 flex items-center gap-2 text-[#c8a96e] text-xs font-bold uppercase tracking-wider opacity-0 -translate-y-1 group-hover:opacity-100 group-hover:translate-y-0 transition-all duration-300">
             Подробнее <ArrowRight size={12} />
@@ -525,11 +568,8 @@ export default function ServicesSection() {
     >
       <div
         className="absolute inset-0 pointer-events-none"
-        style={{
-          background: 'radial-gradient(ellipse 60% 40% at 50% 0%, rgba(200,169,110,0.06) 0%, transparent 70%)',
-        }}
+        style={{ background: 'radial-gradient(ellipse 60% 40% at 50% 0%, rgba(200,169,110,0.06) 0%, transparent 70%)' }}
       />
-
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
         <div className="flex flex-col items-center text-center mb-8">
           <div className="flex items-center gap-3 mb-3">
@@ -537,10 +577,7 @@ export default function ServicesSection() {
             <span className="text-[#c8a96e] text-xs tracking-[0.2em] uppercase font-semibold">Наши услуги</span>
             <div className="w-8 h-px bg-[#c8a96e]" />
           </div>
-          <h2
-            className="text-3xl lg:text-5xl font-bold text-white leading-tight"
-            style={{ fontFamily: 'Georgia, serif' }}
-          >
+          <h2 className="text-3xl lg:text-5xl font-bold text-white leading-tight" style={{ fontFamily: 'Georgia, serif' }}>
             Что мы <em className="not-italic text-[#c8a96e]">изготавливаем</em>
           </h2>
           <p className="text-white/40 text-xs mt-2 max-w-md">

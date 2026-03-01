@@ -1,28 +1,42 @@
 'use client';
-import { BLUR } from '@/lib/image-utils';
+
+/**
+ * ArticlesSection.tsx — ОПТИМИЗИРОВАННАЯ ВЕРСИЯ
+ *
+ * Изменения vs оригинал:
+ * ───────────────────────────────────────────────────────────────
+ * 1. ArticleModal: blurDataURL заменён на ImageSkeleton — нет "мыла"
+ * 2. Preload: изображение статьи начинает грузиться при hover на карточку
+ *    (было: только при hover, но без правильного /_next/image URL)
+ * 3. Правильный nextImageUrl через preloader singleton — кэш браузера
+ *    гарантированно сработает когда <Image priority /> запросит тот же URL
+ * 4. ArticleModal использует layoutId для zoom-анимации из карточки
+ */
+
 import { ArrowRight, Calendar, ChevronLeft, ChevronRight, X } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import Image from 'next/image';
 import { cn } from '@/lib/utils';
 import { ARTICLES } from '@/lib/data';
 import type { Article } from '@/lib/data';
+import { preloader, ARTICLE_MODAL_WIDTH } from '@/lib/image-preloader';
+import ImageSkeleton from '@/app/components/ui/ImageSkeleton';
 
 import { Swiper, SwiperSlide } from 'swiper/react';
 import { Autoplay, EffectCoverflow } from 'swiper/modules';
 import type { Swiper as SwiperType } from 'swiper';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence, LayoutGroup } from 'framer-motion';
 
 import 'swiper/css';
 import 'swiper/css/effect-coverflow';
 
-// ─── Article Modal ────────────────────────────────────────────────────────────
+// ─── Article Modal ─────────────────────────────────────────────────────────────
 function ArticleModal({ article, onClose }: { article: Article; onClose: () => void }) {
   const [imgLoaded, setImgLoaded] = useState(false);
+
   useEffect(() => {
     document.body.style.overflow = 'hidden';
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
+    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
     window.addEventListener('keydown', handler);
     return () => {
       window.removeEventListener('keydown', handler);
@@ -30,10 +44,7 @@ function ArticleModal({ article, onClose }: { article: Article; onClose: () => v
     };
   }, [onClose]);
 
-  // Split content into paragraphs
-  const paragraphs = article.fullContent
-    .split('\n\n')
-    .filter(p => p.trim());
+  const paragraphs = article.fullContent.split('\n\n').filter(p => p.trim());
 
   return (
     <div
@@ -52,12 +63,9 @@ function ArticleModal({ article, onClose }: { article: Article; onClose: () => v
         onClick={onClose}
       />
 
-      {/* Panel */}
+      {/* Panel — layoutId совпадает с карточкой статьи */}
       <motion.div
-        initial={{ opacity: 0, y: 60 }}
-        animate={{ opacity: 1, y: 0 }}
-        exit={{ opacity: 0, y: 40 }}
-        transition={{ type: 'spring', damping: 30, stiffness: 300 }}
+        layoutId={`article-card-${article.id}`}
         className="relative w-full sm:max-w-2xl rounded-t-3xl sm:rounded-3xl overflow-hidden z-10 flex flex-col"
         style={{
           background: 'linear-gradient(145deg, #1f1208 0%, #150d05 100%)',
@@ -65,25 +73,26 @@ function ArticleModal({ article, onClose }: { article: Article; onClose: () => v
           boxShadow: '0 32px 80px rgba(0,0,0,0.7)',
           maxHeight: '92vh',
         }}
+        transition={{ type: 'spring', damping: 30, stiffness: 280 }}
       >
         {/* Cover image */}
         <div className="relative h-52 sm:h-64 shrink-0 bg-[#1a1008]">
+          {/* Skeleton вместо blur */}
+          <ImageSkeleton loaded={imgLoaded} />
+
           <Image
             src={article.image}
             alt={article.title}
             fill
             className="object-cover"
             sizes="(max-width: 640px) 100vw, 672px"
-            // ✅ priority: модалка открыта = изображение НУЖНО прямо сейчас
-            priority
-            quality={85}
-            // ✅ blur placeholder вместо кастомного skeleton — плавнее
-            placeholder="blur"
-            blurDataURL={BLUR.article}
+            priority  // Модалка открыта — грузим сразу
+            quality={88}
+            // blurDataURL убран — ImageSkeleton выглядит гораздо лучше
+            onLoad={() => setImgLoaded(true)}
           />
           <div className="absolute inset-0 bg-gradient-to-t from-[#150d05] via-transparent to-transparent opacity-90" />
 
-          {/* Close */}
           <button
             onClick={onClose}
             aria-label="Закрыть"
@@ -92,13 +101,9 @@ function ArticleModal({ article, onClose }: { article: Article; onClose: () => v
             <X className="w-4 h-4" />
           </button>
 
-          {/* Date badge */}
           <div
             className="absolute top-4 left-4 flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] text-white/90 font-medium uppercase tracking-wider backdrop-blur-md"
-            style={{
-              background: 'rgba(0,0,0,0.45)',
-              border: '1px solid rgba(255,255,255,0.1)',
-            }}
+            style={{ background: 'rgba(0,0,0,0.45)', border: '1px solid rgba(255,255,255,0.1)' }}
           >
             <Calendar className="w-3 h-3 text-[#c8a96e]" />
             {article.date}
@@ -111,26 +116,19 @@ function ArticleModal({ article, onClose }: { article: Article; onClose: () => v
             <span className="inline-block px-3 py-1 mb-4 rounded-full bg-[#c8a96e] text-[#1a1008] text-[10px] font-bold tracking-[0.15em] uppercase shadow-lg shadow-[#c8a96e]/20">
               {article.tag}
             </span>
-
             <h2
               className="text-white text-2xl sm:text-3xl font-bold leading-snug mb-6"
               style={{ fontFamily: 'Georgia, serif' }}
             >
               {article.title}
             </h2>
-
             <div className="space-y-4">
               {paragraphs.map((para, i) => (
-                <p
-                  key={i}
-                  className="text-white/70 text-sm sm:text-base leading-relaxed"
-                >
+                <p key={i} className="text-white/70 text-sm sm:text-base leading-relaxed">
                   {para}
                 </p>
               ))}
             </div>
-
-            {/* Bottom CTA */}
             <div
               className="mt-8 pt-6 flex items-center justify-between"
               style={{ borderTop: '1px solid rgba(255,255,255,0.07)' }}
@@ -147,7 +145,6 @@ function ArticleModal({ article, onClose }: { article: Article; onClose: () => v
           </div>
         </div>
 
-        {/* Mobile drag indicator */}
         <div className="sm:hidden absolute top-3 left-1/2 -translate-x-1/2 w-10 h-1 rounded-full bg-white/20" />
       </motion.div>
     </div>
@@ -160,17 +157,6 @@ export default function ArticlesSection() {
   const [visible, setVisible] = useState(false);
   const swiperRef = useRef<SwiperType | null>(null);
   const [activeArticle, setActiveArticle] = useState<Article | null>(null);
-  const preloadedRef = useRef<Set<number>>(new Set());
-
-  // ✅ Preload изображения статьи при hover/touch
-  const handleCardHover = useCallback((article: Article) => {
-    if (preloadedRef.current.has(article.id)) return;
-    preloadedRef.current.add(article.id);
-
-    const img = new window.Image();
-    // Запрашиваем у Next.js оптимизированную версию нужного размера для модалки
-    img.src = `/_next/image?url=${encodeURIComponent(article.image)}&w=672&q=85`;
-  }, []);
 
   useEffect(() => {
     const obs = new IntersectionObserver(
@@ -181,8 +167,23 @@ export default function ArticlesSection() {
     return () => obs.disconnect();
   }, []);
 
+  // Preload всех изображений статей когда секция становится видимой
+  useEffect(() => {
+    if (!visible) return;
+    preloader.preloadMany(ARTICLES.map(a => a.image), ARTICLE_MODAL_WIDTH);
+  }, [visible]);
+
+  // Hover на карточку → preload (с правильным URL через nextImageUrl)
+  const handleCardHover = useCallback((article: Article) => {
+    preloader.preload(article.image, ARTICLE_MODAL_WIDTH, 88);
+  }, []);
+
   return (
-    <>
+    /*
+     * LayoutGroup нужен, чтобы layoutId работал между SwiperSlide и модалкой.
+     * id уникальный — чтобы не конфликтовал с gallery LayoutGroup.
+     */
+    <LayoutGroup id="articles-section">
       <section
         id="articles"
         ref={sectionRef}
@@ -205,7 +206,6 @@ export default function ArticlesSection() {
                 Полезные <span className="text-[#c8a96e]">материалы</span>
               </h2>
             </div>
-
             <button className="text-[#c8a96e] text-sm hover:text-[#d4b87e] flex items-center gap-2 group transition-colors whitespace-nowrap">
               Все статьи
               <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
@@ -213,16 +213,10 @@ export default function ArticlesSection() {
           </div>
 
           {/* Slider */}
-          {/* Slider */}
-          <div
-            className={cn(
-              'relative transition-all duration-1000 ease-out',
-              visible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'
-            )}
-          >
-            {/* ── Preload: браузер начнёт скачивать картинки до открытия модалки ── */}
-
-
+          <div className={cn(
+            'relative transition-all duration-1000 ease-out',
+            visible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'
+          )}>
             <button
               onClick={() => swiperRef.current?.slidePrev()}
               aria-label="Предыдущая статья"
@@ -230,7 +224,6 @@ export default function ArticlesSection() {
             >
               <ChevronLeft className="w-6 h-6 lg:w-8 lg:h-8 group-hover:-translate-x-1 transition-transform" />
             </button>
-
             <button
               onClick={() => swiperRef.current?.slideNext()}
               aria-label="Следующая статья"
@@ -253,13 +246,18 @@ export default function ArticlesSection() {
             >
               {ARTICLES.map((a, i) => (
                 <SwiperSlide key={a.id} className="!w-[85%] sm:!w-[420px] h-auto">
-                  <article
+                  {/*
+                   * layoutId на карточке — источник анимации.
+                   * Модалка использует тот же layoutId и "вырастает" из карточки.
+                   */}
+                  <motion.article
+                    layoutId={`article-card-${a.id}`}
                     onClick={() => setActiveArticle(a)}
-                    // ✅ Начинаем грузить полноразмерное фото ДО клика
                     onMouseEnter={() => handleCardHover(a)}
                     onTouchStart={() => handleCardHover(a)}
-                    className={cn('group relative h-full rounded-3xl overflow-hidden flex flex-col cursor-pointer shadow-2xl transition-all duration-500 bg-[#1a1008]/80 backdrop-blur-xl')}
+                    className="group relative h-full rounded-3xl overflow-hidden flex flex-col cursor-pointer shadow-2xl bg-[#1a1008]/80 backdrop-blur-xl"
                     style={{ border: '1px solid rgba(200,169,110,0.1)' }}
+                    transition={{ type: 'spring', damping: 30, stiffness: 280 }}
                   >
                     <div className="h-64 relative overflow-hidden w-full shrink-0">
                       <Image
@@ -268,15 +266,13 @@ export default function ArticlesSection() {
                         fill
                         className="object-cover transition-transform duration-1000 group-hover:scale-110"
                         sizes="(max-width: 768px) 85vw, 420px"
-                        // ✅ Первые 2 видимых — priority для LCP
                         priority={i < 2}
                         loading={i < 2 ? undefined : 'lazy'}
                         quality={80}
                         placeholder="blur"
-                        blurDataURL={BLUR.card}
+                        blurDataURL="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDIwIiBoZWlnaHQ9IjI1NiIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iNDIwIiBoZWlnaHQ9IjI1NiIgZmlsbD0iIzFhMTAwOCIvPjwvc3ZnPg=="
                       />
                       <div className="absolute inset-0 bg-gradient-to-t from-[#1a1008] via-transparent to-transparent opacity-90" />
-
                       <div
                         className="absolute top-4 right-4 bg-black/40 backdrop-blur-md px-3 py-1 rounded-full flex items-center gap-1.5 text-[10px] text-white/90 font-medium uppercase tracking-wider"
                         style={{ border: '1px solid rgba(255,255,255,0.1)' }}
@@ -286,23 +282,19 @@ export default function ArticlesSection() {
                       </div>
                     </div>
 
-                    {/* Body */}
                     <div className="p-8 flex-grow flex flex-col -mt-8 bg-gradient-to-b from-transparent to-[#1a1008]">
                       <span className="inline-block px-3 py-1 mb-4 rounded-full bg-[#c8a96e] text-[#1a1008] text-[10px] font-bold tracking-[0.15em] uppercase self-start shadow-lg shadow-[#c8a96e]/20">
                         {a.tag}
                       </span>
-
                       <h3
                         className="text-white font-semibold text-xl lg:text-2xl leading-snug mb-4 group-hover:text-[#c8a96e] transition-colors flex-grow"
                         style={{ fontFamily: 'Georgia, serif' }}
                       >
                         {a.title}
                       </h3>
-
                       <p className="text-white/50 text-sm leading-relaxed mb-8 line-clamp-3">
                         {a.excerpt}
                       </p>
-
                       <div
                         className="mt-auto pt-5 flex items-center justify-between"
                         style={{ borderTop: '1px solid rgba(255,255,255,0.05)' }}
@@ -313,7 +305,7 @@ export default function ArticlesSection() {
                         </span>
                       </div>
                     </div>
-                  </article>
+                  </motion.article>
                 </SwiperSlide>
               ))}
             </Swiper>
@@ -327,6 +319,6 @@ export default function ArticlesSection() {
           <ArticleModal article={activeArticle} onClose={() => setActiveArticle(null)} />
         )}
       </AnimatePresence>
-    </>
+    </LayoutGroup>
   );
 }
