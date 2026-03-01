@@ -28,11 +28,11 @@ const ICON_MAP: Record<string, LucideIcon> = {
 
 const SERVICE_GALLERY: Record<string, string> = {
   'Лестницы': 'Лестницы',
-  'Перила':   'Лестницы',
-  'Двери':    'Двери',
-  'Мебель':   'Мебель',
-  'Арки':     'Арки',
-  'Потолки':  'Лестницы',
+  'Перила': 'Лестницы',
+  'Двери': 'Двери',
+  'Мебель': 'Мебель',
+  'Арки': 'Арки',
+  'Потолки': 'Лестницы',
   'Кабинеты': 'Мебель',
 };
 
@@ -62,7 +62,7 @@ function PhotoLightbox({
     const handler = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose();
       if (e.key === 'ArrowRight') setIdx(i => (i + 1) % images.length);
-      if (e.key === 'ArrowLeft')  setIdx(i => (i - 1 + images.length) % images.length);
+      if (e.key === 'ArrowLeft') setIdx(i => (i - 1 + images.length) % images.length);
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
@@ -487,14 +487,27 @@ export default function ServicesSection() {
   const [selectedService, setSelectedService] = useState<Service | null>(null);
 
   useEffect(() => {
-    document.body.style.overflow = selectedService ? 'hidden' : '';
-    return () => { document.body.style.overflow = ''; };
+    if (selectedService) {
+      const scrollY = window.scrollY;
+      document.body.style.overflow = 'hidden';
+      document.body.style.height = '100%';
+      return () => {
+        document.body.style.overflow = '';
+        document.body.style.height = '';
+        window.scrollTo(0, scrollY);
+      };
+    }
   }, [selectedService]);
 
   const handleCta = useCallback((_title: string) => {
     setSelectedService(null);
     setTimeout(() => {
-      document.getElementById('contact')?.scrollIntoView({ behavior: 'smooth' });
+      const el = document.getElementById('contact');
+      if (!el) return;
+      const isMobile = window.innerWidth < 1024;
+      const offset = isMobile ? 106 : 68;
+      const top = el.getBoundingClientRect().top + window.scrollY - offset;
+      window.scrollTo({ top, behavior: 'smooth' });
     }, 300);
   }, []);
 
