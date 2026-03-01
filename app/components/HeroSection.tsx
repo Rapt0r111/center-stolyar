@@ -1,9 +1,9 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState } from 'react';
 import { ChevronDown, ArrowRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { AnimatePresence, motion } from 'framer-motion';
+import { motion } from 'framer-motion';
 
 const PRODUCTS = [
   'Лестницы',
@@ -18,71 +18,81 @@ interface HeroSectionProps {
   onCta: () => void;
 }
 
-// Современный компонент для Flip-анимации текста
+// ─── Slot machine: prev (above, faded) · current (bright) · next (below, faded)
+const ITEM_H = 26; // px height per row
+
 const FlipText = ({ words }: { words: string[] }) => {
-  const [index, setIndex] = useState(0);
+  // Extended list: [lastWord, w0, w1, …, wN-1, w0_clone]
+  // extIndex points to the "current" word inside extended.
+  // When extIndex reaches the last clone, we instantly jump back to index 1.
+  const extended = [words[words.length - 1], ...words, words[0]];
+
+  const [extIndex, setExtIndex] = useState(1);
+  const [animated, setAnimated] = useState(true);
 
   useEffect(() => {
-    const interval = setInterval(() => {
-      setIndex((prev) => (prev + 1) % words.length);
+    const t = setInterval(() => {
+      setAnimated(true);
+      setExtIndex(i => i + 1);
     }, 3000);
-    return () => clearInterval(interval);
-  }, [words.length]);
+    return () => clearInterval(t);
+  }, []);
+
+  // After the clone-of-first animation completes, instantly jump back to real index 1
+  useEffect(() => {
+    if (extIndex === extended.length - 1) {
+      const t = setTimeout(() => {
+        setAnimated(false);
+        setExtIndex(1);
+      }, 600);
+      return () => clearTimeout(t);
+    }
+  }, [extIndex, extended.length]);
+
+  // translateY to center item[extIndex] in the middle row of the 3-row window
+  const y = -(extIndex - 1) * ITEM_H;
 
   return (
-    <div className="relative flex items-center h-8 overflow-hidden">
-      <AnimatePresence mode="popLayout">
-        {words.map((word, i) => (
-          i === index && (
-            <motion.div
-              key={word}
-              className="flex items-center whitespace-nowrap"
-              initial="initial"
-              animate="animate"
-              exit="exit"
+    <div
+      className="relative overflow-hidden select-none"
+      style={{
+        height: ITEM_H * 3,
+        maskImage:
+          'linear-gradient(to bottom, transparent 0%, black 28%, black 72%, transparent 100%)',
+        WebkitMaskImage:
+          'linear-gradient(to bottom, transparent 0%, black 28%, black 72%, transparent 100%)',
+      }}
+    >
+      <motion.div
+        animate={{ y }}
+        transition={
+          animated
+            ? { duration: 0.55, ease: [0.16, 1, 0.3, 1] }
+            : { duration: 0 }
+        }
+        style={{ willChange: 'transform' }}
+      >
+        {extended.map((word, i) => {
+          const isCurrent  = i === extIndex;
+          const isAdjacent = i === extIndex - 1 || i === extIndex + 1;
+
+          return (
+            <div
+              key={i}
+              className="flex items-center font-bold tracking-wider uppercase text-[#c8a96e] whitespace-nowrap"
+              style={{
+                height: ITEM_H,
+                fontSize: isCurrent ? '0.82rem' : '0.68rem',
+                opacity: isCurrent ? 1 : isAdjacent ? 0.32 : 0,
+                transition: 'opacity 0.45s ease, font-size 0.45s ease',
+                letterSpacing: isCurrent ? '0.12em' : '0.07em',
+              }}
             >
-              {word.split('').map((char, charIndex) => (
-                <motion.span
-                  key={`${word}-${charIndex}`}
-                  variants={{
-                    initial: { 
-                      y: 40, 
-                      rotateX: -90, 
-                      opacity: 0, 
-                      filter: 'blur(10px)' 
-                    },
-                    animate: { 
-                      y: 0, 
-                      rotateX: 0, 
-                      opacity: 1, 
-                      filter: 'blur(0px)',
-                      transition: {
-                        duration: 0.8,
-                        ease: [0.16, 1, 0.3, 1], // Custom spring-like easing
-                        delay: charIndex * 0.03, // Stagger effect
-                      }
-                    },
-                    exit: { 
-                      y: -40, 
-                      rotateX: 90, 
-                      opacity: 0, 
-                      filter: 'blur(10px)',
-                      transition: {
-                        duration: 0.6,
-                        ease: [0.16, 1, 0.3, 1],
-                        delay: charIndex * 0.02,
-                      }
-                    }
-                  }}
-                  className="inline-block text-[#c8a96e] text-sm font-bold tracking-wider uppercase origin-center transform-gpu"
-                >
-                  {char === ' ' ? '\u00A0' : char}
-                </motion.span>
-              ))}
-            </motion.div>
-          )
-        ))}
-      </AnimatePresence>
+              {word}
+            </div>
+          );
+        })}
+      </motion.div>
     </div>
   );
 };
@@ -95,40 +105,38 @@ export default function HeroSection({ onCta }: HeroSectionProps) {
     return () => clearTimeout(timer);
   }, []);
 
-   return (
+  return (
     <section
       id="hero"
       className="relative min-h-screen flex flex-col justify-center overflow-hidden"
       style={{
-        background:
-          'linear-gradient(135deg, #1a1008 0%, #3d2b1f 45%, #2a1d12 100%)',
+        background: 'linear-gradient(135deg, #1a1008 0%, #3d2b1f 45%, #2a1d12 100%)',
       }}
     >
-      {/* Decorative grain overlay */}
+      {/* Grain */}
       <div
         className="absolute inset-0 opacity-[0.04] pointer-events-none select-none"
         style={{
           backgroundImage:
-            'url("data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' width=\'400\' height=\'400\'%3E%3Cfilter id=\'n\'%3E%3CfeTurbulence type=\'fractalNoise\' baseFrequency=\'0.75\' numOctaves=\'4\' stitchTiles=\'stitch\'/%3E%3C/filter%3E%3Crect width=\'400\' height=\'400\' filter=\'url(%23n)\' opacity=\'1\'/%3E%3C/svg%3E")',
+            "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='400' height='400'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='400' height='400' filter='url(%23n)' opacity='1'/%3E%3C/svg%3E\")",
           backgroundSize: '200px 200px',
         }}
       />
 
-      {/* Glowing accent orbs */}
-      <motion.div 
+      {/* Glow orbs */}
+      <motion.div
         initial={{ opacity: 0, scale: 0.8 }}
         animate={{ opacity: 1, scale: 1 }}
-        transition={{ duration: 2, ease: "easeOut" }}
-        className="absolute top-1/4 left-1/4 w-96 h-96 rounded-full bg-[#c8a96e]/10 blur-[120px] pointer-events-none" 
+        transition={{ duration: 2, ease: 'easeOut' }}
+        className="absolute top-1/4 left-1/4 w-96 h-96 rounded-full bg-[#c8a96e]/10 blur-[120px] pointer-events-none"
       />
-      <motion.div 
+      <motion.div
         initial={{ opacity: 0, scale: 0.8 }}
         animate={{ opacity: 1, scale: 1 }}
-        transition={{ duration: 2, ease: "easeOut", delay: 0.5 }}
-        className="absolute bottom-1/4 right-1/4 w-64 h-64 rounded-full bg-[#c8a96e]/8 blur-[100px] pointer-events-none" 
+        transition={{ duration: 2, ease: 'easeOut', delay: 0.5 }}
+        className="absolute bottom-1/4 right-1/4 w-64 h-64 rounded-full bg-[#c8a96e]/8 blur-[100px] pointer-events-none"
       />
 
-      {/* Vertical accent line */}
       <div className="absolute left-8 top-1/4 bottom-1/4 w-px bg-gradient-to-b from-transparent via-[#c8a96e]/40 to-transparent hidden xl:block" />
 
       <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-24 pb-16 md:pb-20">
@@ -144,7 +152,7 @@ export default function HeroSection({ onCta }: HeroSectionProps) {
             Санкт-Петербург · С 2008 года
           </div>
 
-          {/* Main heading */}
+          {/* Heading */}
           <h1
             className={cn(
               'text-5xl sm:text-7xl lg:text-8xl font-bold text-white leading-[0.95] tracking-tight mb-6 transition-all duration-700 delay-100',
@@ -159,16 +167,15 @@ export default function HeroSection({ onCta }: HeroSectionProps) {
             ИЗДЕЛИЙ
           </h1>
 
-          {/* Rotating product tagline - Modernized */}
+          {/* Slot-machine tagline */}
           <div
             className={cn(
               'flex items-center gap-3 mb-10 transition-all duration-700 delay-200',
               visible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-6'
             )}
           >
-            <div className="w-8 h-px bg-[#c8a96e]/60" />
-            <p className="text-white/50 text-sm tracking-widest uppercase">Изготовим</p>
-            {/* New Flip Component */}
+            <div className="w-8 h-px bg-[#c8a96e]/60 shrink-0" />
+            <p className="text-white/50 text-sm tracking-widest uppercase shrink-0">Изготовим</p>
             <FlipText words={PRODUCTS} />
           </div>
 
@@ -184,7 +191,7 @@ export default function HeroSection({ onCta }: HeroSectionProps) {
             и монтаж по всему Санкт-Петербургу.
           </p>
 
-          {/* CTA buttons */}
+          {/* CTA */}
           <div
             className={cn(
               'flex flex-col sm:flex-row gap-4 transition-all duration-700 delay-[400ms]',
@@ -206,8 +213,8 @@ export default function HeroSection({ onCta }: HeroSectionProps) {
             </a>
           </div>
 
-          {/* Stats strip */}
-         <div
+          {/* Stats */}
+          <div
             className={cn(
               'mt-16 pt-8 border-t border-white/10 grid grid-cols-3 gap-8 max-w-lg transition-all duration-700 delay-500',
               visible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-6'
@@ -217,7 +224,7 @@ export default function HeroSection({ onCta }: HeroSectionProps) {
               { value: '16+', label: 'лет опыта' },
               { value: '500+', label: 'проектов' },
               { value: '100%', label: 'гарантия' },
-            ].map((stat) => (
+            ].map(stat => (
               <div key={stat.label}>
                 <p className="text-3xl font-bold text-[#c8a96e]">{stat.value}</p>
                 <p className="text-white/40 text-xs uppercase tracking-widest mt-1">{stat.label}</p>
@@ -228,7 +235,7 @@ export default function HeroSection({ onCta }: HeroSectionProps) {
       </div>
 
       {/* Scroll indicator */}
-      <motion.div 
+      <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         transition={{ delay: 1, duration: 1 }}
@@ -237,7 +244,7 @@ export default function HeroSection({ onCta }: HeroSectionProps) {
         <span className="text-xs uppercase tracking-widest">Прокрутите</span>
         <motion.div
           animate={{ y: [0, 8, 0] }}
-          transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
+          transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
         >
           <ChevronDown className="w-4 h-4" />
         </motion.div>

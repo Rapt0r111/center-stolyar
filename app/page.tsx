@@ -9,14 +9,13 @@ import GallerySection  from '@/app/components/GallerySection';
 import ArticlesSection from '@/app/components/ArticlesSection';
 import ContactSection  from '@/app/components/ContactSection';
 import FooterSection   from '@/app/components/FooterSection';
+import ScrollToTop     from '@/app/components/ScrollToTop';
 
 export default function HomePage() {
-  // Smooth scroll — memoised so child components don't re-render on unrelated state
   const scrollTo = useCallback((id: string) => {
     const el = document.getElementById(id);
     if (!el) return;
 
-    // Use View Transition API when available (Chrome 111+)
     if ('startViewTransition' in document) {
       (document as Document & { startViewTransition: (cb: () => void) => void })
         .startViewTransition(() => {
@@ -39,6 +38,7 @@ export default function HomePage() {
         <ContactSection  />
         <FooterSection   />
       </main>
+      <ScrollToTop />
     </div>
   );
 }

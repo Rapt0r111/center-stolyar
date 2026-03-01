@@ -1,16 +1,10 @@
 // ─── Server Component — no 'use client' ─────────────────────────────────────
-// Only the animated counters need the client; everything else renders on server.
+// Only the animated counters and tag modals need the client.
 
 import Image from 'next/image';
 import { STATS } from '@/lib/data';
 import StatsRow from './statsrow';
-
-const TAGS = [
-  'Собственное производство',
-  'Доставка и монтаж',
-  'Гарантия 2 года',
-  'Авторский дизайн',
-] as const;
+import TagsWithModal from './Tagswithmodal';
 
 const VALUES = [
   { icon: '🌳', text: 'Натуральное дерево'       },
@@ -65,20 +59,8 @@ export default function AboutSection() {
               до современного минимализма.
             </p>
 
-            <div className="flex flex-wrap gap-3">
-              {TAGS.map(tag => (
-                <span
-                  key={tag}
-                  className="px-4 py-1.5 rounded-full text-[#3d2b1f] text-xs font-medium"
-                  style={{
-                    background: 'rgba(200,169,110,0.12)',
-                    border: '1px solid rgba(200,169,110,0.28)',
-                  }}
-                >
-                  {tag}
-                </span>
-              ))}
-            </div>
+            {/* Clickable tags — client island */}
+            <TagsWithModal />
           </div>
 
           {/* Right — blockquote card */}
