@@ -2,7 +2,6 @@
 
 /* ─── Design Tokens (Tailwind v4 @theme) ─────────────────────────────────── */
 @theme {
-  /* Brand palette */
   --color-gold:        #c8a96e;
   --color-gold-light:  #d4b87e;
   --color-gold-dim:    color-mix(in oklch, #c8a96e 15%, transparent);
@@ -11,16 +10,13 @@
   --color-wood-deep:   #2a1d12;
   --color-cream:       #f5f0e8;
 
-  /* Typography */
   --font-serif:  Georgia, "Times New Roman", serif;
   --font-sans:   var(--font-geist-sans), Arial, Helvetica, sans-serif;
   --font-mono:   var(--font-geist-mono), monospace;
 
-  /* Spacing scale additions */
   --spacing-18: 4.5rem;
   --spacing-22: 5.5rem;
 
-  /* Animation */
   --ease-spring:   cubic-bezier(0.16, 1, 0.3, 1);
   --ease-out-expo: cubic-bezier(0.19, 1, 0.22, 1);
 }
@@ -30,7 +26,6 @@
 
 html {
   scroll-behavior: smooth;
-  /* Prevent layout shift from scrollbar */
   scrollbar-gutter: stable;
 }
 
@@ -65,7 +60,6 @@ body {
     background-size: 150px;
   }
 
-  /* Glass morphism card */
   .glass {
     background: color-mix(in oklch, white 4%, transparent);
     border: 1px solid color-mix(in oklch, white 10%, transparent);
@@ -73,12 +67,10 @@ body {
     -webkit-backdrop-filter: blur(12px) saturate(180%);
   }
 
-  /* Gold glow */
   .glow-gold {
     box-shadow: 0 0 40px color-mix(in oklch, var(--color-gold) 30%, transparent);
   }
 
-  /* Text gradient */
   .text-gradient-gold {
     background: linear-gradient(135deg, var(--color-gold), var(--color-gold-light));
     -webkit-background-clip: text;
@@ -91,6 +83,12 @@ body {
 @keyframes fade-slide-in {
   from { opacity: 0; transform: translateY(10px); }
   to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ─── Skeleton shimmer ───────────────────────────────────────────────────── */
+@keyframes skeleton-shimmer {
+  from { transform: translateX(-100%); }
+  to   { transform: translateX(100%); }
 }
 
 /* ─── Swiper overrides ───────────────────────────────────────────────────── */
