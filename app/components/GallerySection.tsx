@@ -474,29 +474,53 @@ export default function GallerySection() {
               <ChevronRight className="w-6 h-6 lg:w-8 lg:h-8 group-hover:translate-x-1 transition-transform" />
             </button>
 
-            <Swiper
-              modules={[Autoplay, EffectCoverflow]}
-              effect="coverflow"
-              grabCursor
-              centeredSlides
-              slidesPerView="auto"
-              coverflowEffect={{ rotate: 0, stretch: 0, depth: 160, modifier: 2, slideShadows: false }}
-              autoplay={{ delay: 5000, disableOnInteraction: true }}
-              watchSlidesProgress
-              onSlideChange={handleSlideChange}
-              onSwiper={swiper => { swiperRef.current = swiper; }}
-            >
-              {filtered.map((item, i) => (
-                <SwiperSlide key={`${filter}-${item.id}`} className="!w-[80%] sm:!w-[450px] h-auto">
-                  <SlideCard
-                    item={item}
-                    isPriority={Math.abs(i - activeIndex) <= 1}
-                    onHoverStart={() => handleCardHover(item)}
-                    onClick={() => handleCardClick(item)}
-                  />
-                </SwiperSlide>
-              ))}
-            </Swiper>
+            {/*
+             * gallery-coverflow-swiper — класс-изолятор.
+             * EffectCoverflow сам управляет 3D-позицией слайдов через
+             * CSS matrix3d. Глобальное правило в globals.css накладывает
+             * поверх него transform: scale(0.9), что ломает z-порядок
+             * и создаёт наслоение карточек. Сбрасываем его здесь.
+             */}
+            <style>{`
+              .gallery-coverflow-swiper .swiper-slide {
+                opacity: 1 !important;
+                filter: none !important;
+                transform: none !important;
+                /* EffectCoverflow применяет трансформации сам через
+                   inline style — не мешаем ему */
+              }
+              .gallery-coverflow-swiper .swiper-slide:not(.swiper-slide-active) {
+                opacity: 1 !important;
+                filter: none !important;
+                transform: none !important;
+              }
+            `}</style>
+
+            <div className="gallery-coverflow-swiper">
+              <Swiper
+                modules={[Autoplay, EffectCoverflow]}
+                effect="coverflow"
+                grabCursor
+                centeredSlides
+                slidesPerView="auto"
+                coverflowEffect={{ rotate: 0, stretch: 0, depth: 160, modifier: 2, slideShadows: false }}
+                autoplay={{ delay: 5000, disableOnInteraction: true }}
+                watchSlidesProgress
+                onSlideChange={handleSlideChange}
+                onSwiper={swiper => { swiperRef.current = swiper; }}
+              >
+                {filtered.map((item, i) => (
+                  <SwiperSlide key={`${filter}-${item.id}`} className="!w-[80%] sm:!w-[450px] h-auto">
+                    <SlideCard
+                      item={item}
+                      isPriority={Math.abs(i - activeIndex) <= 1}
+                      onHoverStart={() => handleCardHover(item)}
+                      onClick={() => handleCardClick(item)}
+                    />
+                  </SwiperSlide>
+                ))}
+              </Swiper>
+            </div>
           </div>
         </div>
       </section>

@@ -232,6 +232,16 @@ export default function ArticlesSection() {
               <ChevronRight className="w-6 h-6 lg:w-8 lg:h-8 group-hover:translate-x-1 transition-transform" />
             </button>
 
+            <style>{`
+              .articles-coverflow-swiper .swiper-slide,
+              .articles-coverflow-swiper .swiper-slide:not(.swiper-slide-active) {
+                opacity: 1 !important;
+                filter: none !important;
+                transform: none !important;
+              }
+            `}</style>
+
+            <div className="articles-coverflow-swiper">
             <Swiper
               modules={[Autoplay, EffectCoverflow]}
               onSwiper={swiper => { swiperRef.current = swiper; }}
@@ -309,6 +319,7 @@ export default function ArticlesSection() {
                 </SwiperSlide>
               ))}
             </Swiper>
+            </div>
           </div>
         </div>
       </section>
