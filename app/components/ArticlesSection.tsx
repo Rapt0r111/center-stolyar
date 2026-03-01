@@ -16,13 +16,8 @@ import 'swiper/css';
 import 'swiper/css/effect-coverflow';
 
 // ─── Article Modal ────────────────────────────────────────────────────────────
-function ArticleModal({
-  article,
-  onClose,
-}: {
-  article: Article;
-  onClose: () => void;
-}) {
+function ArticleModal({ article, onClose }: { article: Article; onClose: () => void }) {
+  const [imgLoaded, setImgLoaded] = useState(false);
   useEffect(() => {
     document.body.style.overflow = 'hidden';
     const handler = (e: KeyboardEvent) => {
@@ -72,14 +67,32 @@ function ArticleModal({
         }}
       >
         {/* Cover image */}
-        <div className="relative h-52 sm:h-64 shrink-0">
+        <div className="relative h-52 sm:h-64 shrink-0 bg-[#1a1008]">
+          {!imgLoaded && (
+            <div className="absolute inset-0 z-10">
+              <div
+                className="w-full h-full animate-pulse"
+                style={{ background: 'linear-gradient(90deg, #2a1a0e 25%, #3d2b1f 50%, #2a1a0e 75%)', backgroundSize: '200% 100%' }}
+              />
+              {/* Иконка изображения по центру */}
+              <div className="absolute inset-0 flex items-center justify-center">
+                <svg className="w-10 h-10 text-[#c8a96e]/20" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z" />
+                </svg>
+              </div>
+            </div>
+          )}
           <Image
             src={article.image}
             alt={article.title}
             fill
-            className="object-cover"
+            className={cn(
+              "object-cover transition-opacity duration-500",
+              imgLoaded ? "opacity-100" : "opacity-0"  // ← плавное появление
+            )}
             sizes="(max-width: 640px) 100vw, 672px"
             priority
+            onLoad={() => setImgLoaded(true)}  // ← триггер
           />
           <div className="absolute inset-0 bg-gradient-to-t from-[#150d05] via-transparent to-transparent opacity-90" />
 
@@ -235,70 +248,74 @@ export default function ArticlesSection() {
               coverflowEffect={{ rotate: 0, stretch: 0, depth: 100, modifier: 2.5, slideShadows: false }}
               autoplay={{ delay: 5000, disableOnInteraction: true }}
             >
-              {ARTICLES.map(a => (
-                <SwiperSlide
-                  key={a.id}
-                  className="!w-[85%] sm:!w-[420px] h-auto"
-                >
-                  <article
-                    onClick={() => setActiveArticle(a)}
-                    className={cn(
-                      'group relative h-full rounded-3xl overflow-hidden flex flex-col',
-                      'cursor-pointer shadow-2xl transition-all duration-500',
-                      'bg-[#1a1008]/80 backdrop-blur-xl',
-                    )}
-                    style={{ border: '1px solid rgba(200,169,110,0.1)' }}
+              <div className="hidden" aria-hidden="true">
+
+                {ARTICLES.map(a => (
+                  <SwiperSlide
+                    key={a.id}
+                    className="!w-[85%] sm:!w-[420px] h-auto"
                   >
-                    {/* Cover */}
-                    <div className="h-64 relative overflow-hidden w-full shrink-0">
-                      <Image
-                        src={a.image}
-                        alt={a.title}
-                        fill
-                        className="object-cover transition-transform duration-1000 group-hover:scale-110"
-                        sizes="(max-width: 768px) 85vw, 420px"
-                      />
-                      <div className="absolute inset-0 bg-gradient-to-t from-[#1a1008] via-transparent to-transparent opacity-90" />
+                    <article
+                      onClick={() => setActiveArticle(a)}
+                      className={cn(
+                        'group relative h-full rounded-3xl overflow-hidden flex flex-col',
+                        'cursor-pointer shadow-2xl transition-all duration-500',
+                        'bg-[#1a1008]/80 backdrop-blur-xl',
+                      )}
+                      style={{ border: '1px solid rgba(200,169,110,0.1)' }}
+                    >
+                      {/* Cover */}
+                      <div className="h-64 relative overflow-hidden w-full shrink-0">
+                        <Image
+                          src={a.image}
+                          alt={a.title}
+                          fill
+                          className="object-cover transition-transform duration-1000 group-hover:scale-110"
+                          sizes="(max-width: 768px) 85vw, 420px"
+                          priority={a.id <= 3}
+                        />
+                        <div className="absolute inset-0 bg-gradient-to-t from-[#1a1008] via-transparent to-transparent opacity-90" />
 
-                      <div
-                        className="absolute top-4 right-4 bg-black/40 backdrop-blur-md px-3 py-1 rounded-full flex items-center gap-1.5 text-[10px] text-white/90 font-medium uppercase tracking-wider"
-                        style={{ border: '1px solid rgba(255,255,255,0.1)' }}
-                      >
-                        <Calendar className="w-3 h-3 text-[#c8a96e]" />
-                        {a.date}
+                        <div
+                          className="absolute top-4 right-4 bg-black/40 backdrop-blur-md px-3 py-1 rounded-full flex items-center gap-1.5 text-[10px] text-white/90 font-medium uppercase tracking-wider"
+                          style={{ border: '1px solid rgba(255,255,255,0.1)' }}
+                        >
+                          <Calendar className="w-3 h-3 text-[#c8a96e]" />
+                          {a.date}
+                        </div>
                       </div>
-                    </div>
 
-                    {/* Body */}
-                    <div className="p-8 flex-grow flex flex-col -mt-8 bg-gradient-to-b from-transparent to-[#1a1008]">
-                      <span className="inline-block px-3 py-1 mb-4 rounded-full bg-[#c8a96e] text-[#1a1008] text-[10px] font-bold tracking-[0.15em] uppercase self-start shadow-lg shadow-[#c8a96e]/20">
-                        {a.tag}
-                      </span>
-
-                      <h3
-                        className="text-white font-semibold text-xl lg:text-2xl leading-snug mb-4 group-hover:text-[#c8a96e] transition-colors flex-grow"
-                        style={{ fontFamily: 'Georgia, serif' }}
-                      >
-                        {a.title}
-                      </h3>
-
-                      <p className="text-white/50 text-sm leading-relaxed mb-8 line-clamp-3">
-                        {a.excerpt}
-                      </p>
-
-                      <div
-                        className="mt-auto pt-5 flex items-center justify-between"
-                        style={{ borderTop: '1px solid rgba(255,255,255,0.05)' }}
-                      >
-                        <span className="text-[#c8a96e] text-sm font-bold uppercase tracking-widest group-hover:text-[#d4b87e] transition-colors flex items-center gap-2">
-                          Читать полностью
-                          <ArrowRight className="w-4 h-4 opacity-0 -translate-x-2 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-300" />
+                      {/* Body */}
+                      <div className="p-8 flex-grow flex flex-col -mt-8 bg-gradient-to-b from-transparent to-[#1a1008]">
+                        <span className="inline-block px-3 py-1 mb-4 rounded-full bg-[#c8a96e] text-[#1a1008] text-[10px] font-bold tracking-[0.15em] uppercase self-start shadow-lg shadow-[#c8a96e]/20">
+                          {a.tag}
                         </span>
+
+                        <h3
+                          className="text-white font-semibold text-xl lg:text-2xl leading-snug mb-4 group-hover:text-[#c8a96e] transition-colors flex-grow"
+                          style={{ fontFamily: 'Georgia, serif' }}
+                        >
+                          {a.title}
+                        </h3>
+
+                        <p className="text-white/50 text-sm leading-relaxed mb-8 line-clamp-3">
+                          {a.excerpt}
+                        </p>
+
+                        <div
+                          className="mt-auto pt-5 flex items-center justify-between"
+                          style={{ borderTop: '1px solid rgba(255,255,255,0.05)' }}
+                        >
+                          <span className="text-[#c8a96e] text-sm font-bold uppercase tracking-widest group-hover:text-[#d4b87e] transition-colors flex items-center gap-2">
+                            Читать полностью
+                            <ArrowRight className="w-4 h-4 opacity-0 -translate-x-2 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-300" />
+                          </span>
+                        </div>
                       </div>
-                    </div>
-                  </article>
-                </SwiperSlide>
-              ))}
+                    </article>
+                  </SwiperSlide>
+                ))}
+              </div>
             </Swiper>
           </div>
         </div>
