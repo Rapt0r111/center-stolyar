@@ -1,7 +1,7 @@
 'use client';
-
+import { BLUR } from '@/lib/image-utils';
 import { ArrowRight, Calendar, ChevronLeft, ChevronRight, X } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import Image from 'next/image';
 import { cn } from '@/lib/utils';
 import { ARTICLES } from '@/lib/data';
@@ -68,31 +68,18 @@ function ArticleModal({ article, onClose }: { article: Article; onClose: () => v
       >
         {/* Cover image */}
         <div className="relative h-52 sm:h-64 shrink-0 bg-[#1a1008]">
-          {!imgLoaded && (
-            <div className="absolute inset-0 z-10">
-              <div
-                className="w-full h-full animate-pulse"
-                style={{ background: 'linear-gradient(90deg, #2a1a0e 25%, #3d2b1f 50%, #2a1a0e 75%)', backgroundSize: '200% 100%' }}
-              />
-              {/* Иконка изображения по центру */}
-              <div className="absolute inset-0 flex items-center justify-center">
-                <svg className="w-10 h-10 text-[#c8a96e]/20" fill="currentColor" viewBox="0 0 24 24">
-                  <path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z" />
-                </svg>
-              </div>
-            </div>
-          )}
           <Image
             src={article.image}
             alt={article.title}
             fill
-            className={cn(
-              "object-cover transition-opacity duration-500",
-              imgLoaded ? "opacity-100" : "opacity-0"  // ← плавное появление
-            )}
+            className="object-cover"
             sizes="(max-width: 640px) 100vw, 672px"
+            // ✅ priority: модалка открыта = изображение НУЖНО прямо сейчас
             priority
-            onLoad={() => setImgLoaded(true)}  // ← триггер
+            quality={85}
+            // ✅ blur placeholder вместо кастомного skeleton — плавнее
+            placeholder="blur"
+            blurDataURL={BLUR.article}
           />
           <div className="absolute inset-0 bg-gradient-to-t from-[#150d05] via-transparent to-transparent opacity-90" />
 
@@ -173,6 +160,17 @@ export default function ArticlesSection() {
   const [visible, setVisible] = useState(false);
   const swiperRef = useRef<SwiperType | null>(null);
   const [activeArticle, setActiveArticle] = useState<Article | null>(null);
+  const preloadedRef = useRef<Set<number>>(new Set());
+
+  // ✅ Preload изображения статьи при hover/touch
+  const handleCardHover = useCallback((article: Article) => {
+    if (preloadedRef.current.has(article.id)) return;
+    preloadedRef.current.add(article.id);
+
+    const img = new window.Image();
+    // Запрашиваем у Next.js оптимизированную версию нужного размера для модалки
+    img.src = `/_next/image?url=${encodeURIComponent(article.image)}&w=672&q=85`;
+  }, []);
 
   useEffect(() => {
     const obs = new IntersectionObserver(
@@ -223,18 +221,7 @@ export default function ArticlesSection() {
             )}
           >
             {/* ── Preload: браузер начнёт скачивать картинки до открытия модалки ── */}
-            <div className="sr-only" aria-hidden="true">
-              {ARTICLES.map(a => (
-                <Image
-                  key={a.id}
-                  src={a.image}
-                  alt=""
-                  width={1}
-                  height={1}
-                  priority
-                />
-              ))}
-            </div>
+
 
             <button
               onClick={() => swiperRef.current?.slidePrev()}
@@ -262,22 +249,18 @@ export default function ArticlesSection() {
               slideToClickedSlide
               coverflowEffect={{ rotate: 0, stretch: 0, depth: 100, modifier: 2.5, slideShadows: false }}
               autoplay={{ delay: 5000, disableOnInteraction: true }}
+              watchSlidesProgress
             >
-              {ARTICLES.map(a => (
-                <SwiperSlide
-                  key={a.id}
-                  className="!w-[85%] sm:!w-[420px] h-auto"
-                >
+              {ARTICLES.map((a, i) => (
+                <SwiperSlide key={a.id} className="!w-[85%] sm:!w-[420px] h-auto">
                   <article
                     onClick={() => setActiveArticle(a)}
-                    className={cn(
-                      'group relative h-full rounded-3xl overflow-hidden flex flex-col',
-                      'cursor-pointer shadow-2xl transition-all duration-500',
-                      'bg-[#1a1008]/80 backdrop-blur-xl',
-                    )}
+                    // ✅ Начинаем грузить полноразмерное фото ДО клика
+                    onMouseEnter={() => handleCardHover(a)}
+                    onTouchStart={() => handleCardHover(a)}
+                    className={cn('group relative h-full rounded-3xl overflow-hidden flex flex-col cursor-pointer shadow-2xl transition-all duration-500 bg-[#1a1008]/80 backdrop-blur-xl')}
                     style={{ border: '1px solid rgba(200,169,110,0.1)' }}
                   >
-                    {/* Cover */}
                     <div className="h-64 relative overflow-hidden w-full shrink-0">
                       <Image
                         src={a.image}
@@ -285,7 +268,12 @@ export default function ArticlesSection() {
                         fill
                         className="object-cover transition-transform duration-1000 group-hover:scale-110"
                         sizes="(max-width: 768px) 85vw, 420px"
-                        priority={a.id <= 3}
+                        // ✅ Первые 2 видимых — priority для LCP
+                        priority={i < 2}
+                        loading={i < 2 ? undefined : 'lazy'}
+                        quality={80}
+                        placeholder="blur"
+                        blurDataURL={BLUR.card}
                       />
                       <div className="absolute inset-0 bg-gradient-to-t from-[#1a1008] via-transparent to-transparent opacity-90" />
 
@@ -336,10 +324,7 @@ export default function ArticlesSection() {
       {/* Article modal */}
       <AnimatePresence>
         {activeArticle && (
-          <ArticleModal
-            article={activeArticle}
-            onClose={() => setActiveArticle(null)}
-          />
+          <ArticleModal article={activeArticle} onClose={() => setActiveArticle(null)} />
         )}
       </AnimatePresence>
     </>

@@ -16,6 +16,7 @@ import { Swiper, SwiperSlide } from 'swiper/react';
 import { Autoplay } from 'swiper/modules';
 import type { Swiper as SwiperType } from 'swiper';
 import 'swiper/css';
+import { BLUR } from '@/lib/image-utils';
 
 const Stairs = createLucideIcon('Stairs', [
   ['path', { d: 'M3 21h18', key: 'base' }],
@@ -340,6 +341,11 @@ function ServiceModal({
                             fill
                             className="object-cover transition-transform duration-500 group-hover:scale-110"
                             sizes="160px"
+                            // ✅ Миниатюры небольшие — грузим лениво, но с низким качеством для скорости
+                            loading="lazy"
+                            quality={70}
+                            placeholder="blur"
+                            blurDataURL={BLUR.thumbnail}
                           />
                           {/* Hover zoom icon */}
                           <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-all duration-300 flex items-center justify-center">
