@@ -10,14 +10,26 @@ import {
 } from 'framer-motion';
 import { cn } from '@/lib/utils';
 
+// ─── Порядок = порядок секций на странице ────────────────────────────────────
 const NAV_LINKS = [
   { label: 'О нас',    id: 'about'    },
+  { label: 'Услуги',   id: 'services' },
   { label: 'Галерея',  id: 'gallery'  },
   { label: 'Блог',     id: 'articles' },
-  { label: 'Услуги',   id: 'services' },
   { label: 'Контакты', id: 'contact'  },
   { label: 'Карта',    id: 'map'      },
 ] as const;
+
+// Быстрая навигация — тот же порядок, без «О нас» и «Карта»
+const QUICK_LINKS = [
+  { label: 'Услуги',    id: 'services' },
+  { label: 'Портфолио', id: 'gallery'  },
+  { label: 'Блог',      id: 'articles' },
+  { label: 'Контакты',  id: 'contact'  },
+] as const;
+
+export const HEADER_HEIGHT_MOBILE  = 106;
+export const HEADER_HEIGHT_DESKTOP = 68;
 
 type NavId = typeof NAV_LINKS[number]['id'];
 
@@ -59,8 +71,8 @@ function useActiveSection(): NavId | '' {
 }
 
 function NavPill({ activeId }: { activeId: string }) {
-  const x = useMotionValue(0);
-  const w = useMotionValue(0);
+  const x  = useMotionValue(0);
+  const w  = useMotionValue(0);
   const sx = useSpring(x, { stiffness: 380, damping: 32 });
   const sw = useSpring(w, { stiffness: 380, damping: 32 });
 
@@ -92,80 +104,52 @@ function NavPill({ activeId }: { activeId: string }) {
   );
 }
 
-// ─── Mobile overlay ───────────────────────────────────────────────────────────
+// ─── Drawer variants ──────────────────────────────────────────────────────────
 const overlayVariants: Variants = {
-  closed: {
-    opacity: 0,
-    transition: { duration: 0.3, ease: [0.4, 0, 1, 1] },
-  },
-  open: {
-    opacity: 1,
-    transition: { duration: 0.35, ease: [0, 0, 0.2, 1] },
-  },
+  closed: { opacity: 0, transition: { duration: 0.3,  ease: [0.4, 0, 1, 1] } },
+  open:   { opacity: 1, transition: { duration: 0.35, ease: [0, 0, 0.2, 1] } },
 };
-
 const drawerVariants: Variants = {
-  closed: {
-    x: '100%',
-    transition: { duration: 0.35, ease: [0.4, 0, 1, 1] },
-  },
-  open: {
-    x: 0,
-    transition: { duration: 0.4, ease: [0, 0, 0.2, 1] },
-  },
+  closed: { x: '100%', transition: { duration: 0.35, ease: [0.4, 0, 1, 1] } },
+  open:   { x: 0,      transition: { duration: 0.4,  ease: [0, 0, 0.2, 1] } },
 };
-
 const linkVariants: Variants = {
   closed: { opacity: 0, x: 24 },
   open: (i: number) => ({
-    opacity: 1,
-    x: 0,
+    opacity: 1, x: 0,
     transition: { delay: 0.08 + i * 0.055, duration: 0.35, ease: [0, 0, 0.2, 1] },
   }),
 };
 
 function MobileDrawer({
-  open,
-  activeId,
-  onLink,
-  onClose,
+  open, activeId, onLink, onClose,
 }: {
-  open: boolean;
-  activeId: string;
-  onLink: (id: string) => void;
-  onClose: () => void;
+  open: boolean; activeId: string;
+  onLink: (id: string) => void; onClose: () => void;
 }) {
   return (
     <AnimatePresence>
       {open && (
         <>
-          {/* Backdrop (теперь закрывает меню по клику на пустую область) */}
+          {/* Overlay — закрывает меню по клику на фон */}
           <motion.div
-            variants={overlayVariants}
-            initial="closed"
-            animate="open"
-            exit="closed"
+            variants={overlayVariants} initial="closed" animate="open" exit="closed"
             onClick={onClose}
             className="fixed inset-0 z-[90] bg-black/60 backdrop-blur-sm cursor-pointer"
           />
 
-          {/* Drawer panel */}
+          {/* Drawer panel — stopPropagation чтобы клики не уходили на overlay */}
           <motion.div
-            variants={drawerVariants}
-            initial="closed"
-            animate="open"
-            exit="closed"
+            variants={drawerVariants} initial="closed" animate="open" exit="closed"
+            onClick={(e) => e.stopPropagation()}
             className="fixed top-0 right-0 bottom-0 z-[95] w-72 flex flex-col"
             style={{
               background: 'linear-gradient(160deg, #1f1208 0%, #150d05 100%)',
               borderLeft: '1px solid rgba(200,169,110,0.15)',
             }}
           >
-            {/* Drawer header */}
-            <div
-              className="flex items-center justify-between px-6 h-16"
-              style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}
-            >
+            {/* Header */}
+            <div className="flex items-center px-6 h-16 shrink-0" style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
               <div>
                 <p className="text-white font-bold text-xs uppercase tracking-wider">Меню</p>
                 <p className="text-[#c8a96e] text-[9px] uppercase tracking-widest opacity-70">Навигация</p>
@@ -178,69 +162,38 @@ function MobileDrawer({
                 const isActive = activeId === link.id;
                 return (
                   <motion.button
-                    key={link.id}
-                    custom={i}
-                    variants={linkVariants}
-                    initial="closed"
-                    animate="open"
+                    key={link.id} custom={i}
+                    variants={linkVariants} initial="closed" animate="open"
                     onClick={() => onLink(link.id)}
                     className={cn(
                       'flex items-center gap-3 w-full px-4 py-3.5 rounded-xl text-left transition-all duration-200',
-                      isActive
-                        ? 'bg-[#c8a96e]/12 text-[#c8a96e]'
-                        : 'text-white/70 hover:text-white hover:bg-white/5',
+                      isActive ? 'bg-[#c8a96e]/12 text-[#c8a96e]' : 'text-white/70 hover:text-white hover:bg-white/5',
                     )}
-                    style={
-                      isActive
-                        ? { border: '1px solid rgba(200,169,110,0.25)' }
-                        : { border: '1px solid transparent' }
-                    }
+                    style={isActive ? { border: '1px solid rgba(200,169,110,0.25)' } : { border: '1px solid transparent' }}
                   >
-                    {/* Number badge */}
-                    <span
-                      className={cn(
-                        'text-[10px] font-mono w-5 h-5 rounded-md flex items-center justify-center shrink-0 font-bold',
-                        isActive
-                          ? 'bg-[#c8a96e] text-[#1a1008]'
-                          : 'bg-white/8 text-white/30',
-                      )}
-                    >
+                    <span className={cn(
+                      'text-[10px] font-mono w-5 h-5 rounded-md flex items-center justify-center shrink-0 font-bold',
+                      isActive ? 'bg-[#c8a96e] text-[#1a1008]' : 'bg-white/8 text-white/30',
+                    )}>
                       {i + 1}
                     </span>
-                    <span
-                      className="font-semibold text-[15px]"
-                      style={isActive ? { fontFamily: 'Georgia, serif' } : undefined}
-                    >
+                    <span className="font-semibold text-[15px]" style={isActive ? { fontFamily: 'Georgia, serif' } : undefined}>
                       {link.label}
                     </span>
-                    {isActive && (
-                      <motion.div
-                        layoutId="activeDot"
-                        className="ml-auto w-1.5 h-1.5 rounded-full bg-[#c8a96e]"
-                      />
-                    )}
+                    {isActive && <motion.div layoutId="activeDot" className="ml-auto w-1.5 h-1.5 rounded-full bg-[#c8a96e]" />}
                   </motion.button>
                 );
               })}
             </nav>
 
-            {/* Drawer footer */}
-            <div
-              className="p-5 space-y-3"
-              style={{ borderTop: '1px solid rgba(255,255,255,0.06)' }}
-            >
+            {/* Footer */}
+            <div className="p-5 space-y-3" style={{ borderTop: '1px solid rgba(255,255,255,0.06)' }}>
               <a
                 href="tel:+78126121515"
-                className="flex items-center gap-3 px-4 py-3 rounded-xl text-white transition-colors"
-                style={{
-                  background: 'rgba(255,255,255,0.04)',
-                  border: '1px solid rgba(255,255,255,0.08)',
-                }}
+                className="flex items-center gap-3 px-4 py-3 rounded-xl text-white"
+                style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }}
               >
-                <div
-                  className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0"
-                  style={{ background: 'rgba(200,169,110,0.15)' }}
-                >
+                <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0" style={{ background: 'rgba(200,169,110,0.15)' }}>
                   <Phone className="w-3.5 h-3.5 text-[#c8a96e]" />
                 </div>
                 <div>
@@ -248,14 +201,10 @@ function MobileDrawer({
                   <p className="text-sm font-semibold text-white">+7 (812) 612-15-15</p>
                 </div>
               </a>
-
               <button
                 onClick={() => onLink('contact')}
-                className="w-full py-3 rounded-xl font-bold text-sm text-[#1a1008] transition-all"
-                style={{
-                  background: '#c8a96e',
-                  boxShadow: '0 4px 20px rgba(200,169,110,0.3)',
-                }}
+                className="w-full py-3 rounded-xl font-bold text-sm text-[#1a1008]"
+                style={{ background: '#c8a96e', boxShadow: '0 4px 20px rgba(200,169,110,0.3)' }}
               >
                 Оставить заявку
               </button>
@@ -271,7 +220,7 @@ function MobileDrawer({
 export default function Navbar({ onNavClick }: { onNavClick: (id: string) => void }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
-  const [mounted, setMounted] = useState(false);
+  const [mounted,  setMounted]  = useState(false);
   const activeSection = useActiveSection();
 
   useEffect(() => { setMounted(true); }, []);
@@ -283,124 +232,85 @@ export default function Navbar({ onNavClick }: { onNavClick: (id: string) => voi
   }, []);
 
   useEffect(() => {
-    if (menuOpen) lockScroll(); else unlockScroll();
-    return () => unlockScroll();
+    if (menuOpen) {
+      lockScroll();
+      return () => unlockScroll();
+    }
   }, [menuOpen]);
 
   const handleLink = (id: string) => {
-    onNavClick(id);
+    // Сначала закрываем меню → unlockScroll восстановит позицию.
+    // Затем через 60ms (после разблокировки body) скроллим к нужной секции.
     setMenuOpen(false);
+    setTimeout(() => onNavClick(id), 60);
   };
+
+  const bgStyle: React.CSSProperties = scrolled
+    ? { background: 'rgba(18,11,4,0.97)', backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)' }
+    : { background: 'rgba(18,11,4,0.75)', backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)' };
 
   return (
     <>
-      {/* ── Desktop + mobile bar ─────────────────────────────────────────── */}
       <header
-        className={cn(
-          'fixed top-0 left-0 right-0 z-50 transition-all duration-500',
-          scrolled
-            ? 'h-16 lg:h-[68px]'
-            : 'h-16 lg:h-20',
-        )}
+        className="fixed top-0 left-0 right-0 z-50 transition-shadow duration-500"
+        style={{ boxShadow: scrolled ? '0 4px 32px rgba(0,0,0,0.5)' : 'none' }}
       >
-        {/* Background layer */}
-        <div
-          className={cn(
-            'absolute inset-0 transition-all duration-500',
-            scrolled
-              ? 'bg-[#120b04]/95 backdrop-blur-xl shadow-lg'
-              : 'bg-[#120b04]/70 backdrop-blur-md',
-          )}
-          style={{
-            borderBottom: scrolled
-              ? '1px solid rgba(200,169,110,0.18)'
-              : '1px solid rgba(200,169,110,0.06)',
-          }}
-        />
+        {/* ── Полоса 1: логотип + десктоп-нав + кнопка меню ─────────── */}
+        <div style={{ ...bgStyle, borderBottom: '1px solid rgba(200,169,110,0.12)' }}>
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 lg:h-[68px] flex items-center justify-between">
 
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-full flex items-center justify-between relative">
-
-          {/* Logo */}
-          <button
-            onClick={() => handleLink('hero')}
-            className="flex items-center gap-3 z-10 group"
-          >
-            <div className="relative">
-              <Image
-                src="/images/logo-black.png"
-                alt="ЦСИ"
-                width={48}
-                height={38}
-                className="w-auto h-9 lg:h-11 object-contain"
-                priority
-              />
-            </div>
-            <div className="flex flex-col text-left">
-              <span className="text-white font-bold text-[11px] lg:text-xs uppercase tracking-wider leading-tight group-hover:text-[#c8a96e] transition-colors">
-                Центр Столярных
-              </span>
-              <span className="text-[#c8a96e] text-[8px] lg:text-[9px] uppercase tracking-[0.25em] leading-tight">
-                Изделий · СПб
-              </span>
-            </div>
-          </button>
-
-          {/* Desktop nav */}
-          <nav className="hidden lg:flex items-center gap-1 relative">
-            {mounted && <NavPill activeId={activeSection} />}
-            {NAV_LINKS.map(link => (
-              <button
-                key={link.id}
-                id={`nav-btn-${link.id}`}
-                onClick={() => handleLink(link.id)}
-                className={cn(
-                  'relative px-4 py-2 text-sm font-medium transition-colors duration-200 z-10 rounded-full',
-                  activeSection === link.id
-                    ? 'text-[#c8a96e]'
-                    : 'text-white/65 hover:text-white',
-                )}
-              >
-                {link.label}
-              </button>
-            ))}
-          </nav>
-
-          {/* Desktop right */}
-          <div className="hidden lg:flex items-center gap-4">
-            <a
-              href="tel:+78126121515"
-              className="flex items-center gap-2 text-white/65 hover:text-[#c8a96e] text-sm transition-colors"
-            >
-              <Phone className="w-3.5 h-3.5" />
-              +7 (812) 612-15-15
-            </a>
-            <button
-              onClick={() => handleLink('contact')}
-              className="px-5 py-2 rounded-lg text-sm font-bold transition-all hover:-translate-y-0.5 hover:shadow-lg"
-              style={{
-                background: '#c8a96e',
-                color: '#1a1008',
-                boxShadow: '0 0 0 rgba(200,169,110,0)',
-              }}
-              onMouseEnter={e => {
-                (e.currentTarget as HTMLElement).style.boxShadow =
-                  '0 8px 24px rgba(200,169,110,0.35)';
-              }}
-              onMouseLeave={e => {
-                (e.currentTarget as HTMLElement).style.boxShadow = 'none';
-              }}
-            >
-              Заявка
+            {/* Логотип */}
+            <button onClick={() => handleLink('hero')} className="flex items-center gap-2.5 group shrink-0">
+              <Image src="/images/logo-black.png" alt="ЦСИ" width={48} height={38} className="w-auto h-8 lg:h-10 object-contain" priority />
+              <div className="flex flex-col text-left">
+                <span className="text-white font-bold text-[10px] lg:text-xs uppercase tracking-wider leading-tight group-hover:text-[#c8a96e] transition-colors">
+                  Центр Столярных
+                </span>
+                <span className="text-[#c8a96e] text-[8px] lg:text-[9px] uppercase tracking-[0.25em] leading-tight">
+                  Изделий · СПб
+                </span>
+              </div>
             </button>
-          </div>
 
-          {/* Mobile right: ОГРОМНАЯ КНОПКА МЕНЮ */}
-          <div className="flex lg:hidden items-center">
+            {/* Десктоп-навигация */}
+            <nav className="hidden lg:flex items-center gap-1 relative">
+              {mounted && <NavPill activeId={activeSection} />}
+              {NAV_LINKS.map(link => (
+                <button
+                  key={link.id}
+                  id={`nav-btn-${link.id}`}
+                  onClick={() => handleLink(link.id)}
+                  className={cn(
+                    'relative px-4 py-2 text-sm font-medium transition-colors duration-200 z-10 rounded-full',
+                    activeSection === link.id ? 'text-[#c8a96e]' : 'text-white/65 hover:text-white',
+                  )}
+                >
+                  {link.label}
+                </button>
+              ))}
+            </nav>
+
+            {/* Десктоп: телефон + кнопка */}
+            <div className="hidden lg:flex items-center gap-4">
+              <a href="tel:+78126121515" className="flex items-center gap-2 text-white/65 hover:text-[#c8a96e] text-sm transition-colors">
+                <Phone className="w-3.5 h-3.5" />
+                +7 (812) 612-15-15
+              </a>
+              <button
+                onClick={() => handleLink('contact')}
+                className="px-5 py-2 rounded-lg text-sm font-bold transition-all hover:-translate-y-0.5 hover:shadow-[0_8px_24px_rgba(200,169,110,0.35)]"
+                style={{ background: '#c8a96e', color: '#1a1008' }}
+              >
+                Заявка
+              </button>
+            </div>
+
+            {/* Мобиль: кнопка меню */}
             <button
               onClick={() => setMenuOpen(v => !v)}
               aria-label={menuOpen ? 'Закрыть меню' : 'Открыть меню'}
               className={cn(
-                'h-11 px-4 flex items-center justify-center gap-2.5 rounded-xl transition-all duration-300 shadow-lg border',
+                'lg:hidden h-9 w-9 flex items-center justify-center rounded-xl transition-all duration-300 border shrink-0',
                 menuOpen
                   ? 'bg-white/10 text-white border-white/20'
                   : 'bg-[#c8a96e] text-[#1a1008] border-[#c8a96e] hover:bg-[#d8b97e]'
@@ -408,44 +318,47 @@ export default function Navbar({ onNavClick }: { onNavClick: (id: string) => voi
             >
               <AnimatePresence mode="wait" initial={false}>
                 {menuOpen ? (
-                  <motion.span
-                    key="close"
-                    initial={{ rotate: -90, opacity: 0 }}
-                    animate={{ rotate: 0, opacity: 1 }}
-                    exit={{ rotate: 90, opacity: 0 }}
-                    transition={{ duration: 0.2 }}
-                    className="flex items-center justify-center"
-                  >
-                    <X className="w-5 h-5 stroke-[2.5]" />
+                  <motion.span key="close" initial={{ rotate: -90, opacity: 0 }} animate={{ rotate: 0, opacity: 1 }} exit={{ rotate: 90, opacity: 0 }} transition={{ duration: 0.2 }} className="flex items-center justify-center">
+                    <X className="w-4 h-4 stroke-[2.5]" />
                   </motion.span>
                 ) : (
-                  <motion.span
-                    key="open"
-                    initial={{ rotate: 90, opacity: 0 }}
-                    animate={{ rotate: 0, opacity: 1 }}
-                    exit={{ rotate: -90, opacity: 0 }}
-                    transition={{ duration: 0.2 }}
-                    className="flex items-center justify-center"
-                  >
-                    <Menu className="w-5 h-5 stroke-[2.5]" />
+                  <motion.span key="open" initial={{ rotate: 90, opacity: 0 }} animate={{ rotate: 0, opacity: 1 }} exit={{ rotate: -90, opacity: 0 }} transition={{ duration: 0.2 }} className="flex items-center justify-center">
+                    <Menu className="w-4 h-4 stroke-[2.5]" />
                   </motion.span>
                 )}
               </AnimatePresence>
-              <span className="font-extrabold text-[13px] tracking-wider uppercase mt-[1px]">
-                {menuOpen ? 'Закрыть' : 'Меню'}
-              </span>
             </button>
+          </div>
+        </div>
+
+        {/* ── Полоса 2: быстрая навигация (только мобиль) ───────────── */}
+        <div className="lg:hidden" style={{ ...bgStyle, borderBottom: '1px solid rgba(200,169,110,0.10)' }}>
+          <div className="flex items-center px-3 py-2 gap-2">
+            {QUICK_LINKS.map(link => {
+              const isActive = activeSection === link.id;
+              return (
+                <button
+                  key={link.id}
+                  onClick={() => handleLink(link.id)}
+                  className={cn(
+                    'flex-1 py-1.5 rounded-full text-[11px] font-semibold transition-all duration-200',
+                    isActive ? 'bg-[#c8a96e] text-[#1a1008]' : 'text-white/55 hover:text-white/90',
+                  )}
+                  style={
+                    isActive
+                      ? { boxShadow: '0 2px 12px rgba(200,169,110,0.3)' }
+                      : { background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)' }
+                  }
+                >
+                  {link.label}
+                </button>
+              );
+            })}
           </div>
         </div>
       </header>
 
-      {/* ── Mobile drawer ────────────────────────────────────────────────── */}
-      <MobileDrawer
-        open={menuOpen}
-        activeId={activeSection}
-        onLink={handleLink}
-        onClose={() => setMenuOpen(false)} // Прокидываем функцию закрытия
-      />
+      <MobileDrawer open={menuOpen} activeId={activeSection} onLink={handleLink} onClose={() => setMenuOpen(false)} />
     </>
   );
 }

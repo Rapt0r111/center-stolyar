@@ -11,19 +11,22 @@ import ContactSection  from '@/app/components/ContactSection';
 import FooterSection   from '@/app/components/FooterSection';
 import ScrollToTop     from '@/app/components/ScrollToTop';
 
+// Высоты шапки:
+//   Мобиль  — двухрядная (bar 64px + quick-strip ~42px) = 106px
+//   Десктоп — однорядная 68px
+const MOBILE_HEADER  = 106;
+const DESKTOP_HEADER = 68;
+
 export default function HomePage() {
   const scrollTo = useCallback((id: string) => {
     const el = document.getElementById(id);
     if (!el) return;
 
-    if ('startViewTransition' in document) {
-      (document as Document & { startViewTransition: (cb: () => void) => void })
-        .startViewTransition(() => {
-          el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        });
-    } else {
-      el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }
+    const isMobile   = window.innerWidth < 1024;
+    const offset     = isMobile ? MOBILE_HEADER : DESKTOP_HEADER;
+    const top        = el.getBoundingClientRect().top + window.scrollY - offset;
+
+    window.scrollTo({ top, behavior: 'smooth' });
   }, []);
 
   return (
