@@ -11,22 +11,22 @@ import {
 import { cn } from '@/lib/utils';
 
 const NAV_LINKS = [
-  { label: 'О нас',    id: 'about'    },
-  { label: 'Услуги',   id: 'services' },
-  { label: 'Галерея',  id: 'gallery'  },
-  { label: 'Блог',     id: 'articles' },
-  { label: 'Контакты', id: 'contact'  },
-  { label: 'Карта',    id: 'map'      },
+  { label: 'О нас', id: 'about' },
+  { label: 'Услуги', id: 'services' },
+  { label: 'Галерея', id: 'gallery' },
+  { label: 'Блог', id: 'articles' },
+  { label: 'Контакты', id: 'contact' },
+  { label: 'Карта', id: 'map' },
 ] as const;
 
 const QUICK_LINKS = [
-  { label: 'Услуги',    id: 'services' },
-  { label: 'Портфолио', id: 'gallery'  },
-  { label: 'Блог',      id: 'articles' },
-  { label: 'Контакты',  id: 'contact'  },
+  { label: 'Услуги', id: 'services' },
+  { label: 'Портфолио', id: 'gallery' },
+  { label: 'Блог', id: 'articles' },
+  { label: 'Контакты', id: 'contact' },
 ] as const;
 
-export const HEADER_HEIGHT_MOBILE  = 106;
+export const HEADER_HEIGHT_MOBILE = 106;
 export const HEADER_HEIGHT_DESKTOP = 68;
 
 type NavId = typeof NAV_LINKS[number]['id'];
@@ -37,24 +37,14 @@ let _savedScrollY = 0;
 
 function lockScroll() {
   _savedScrollY = window.scrollY;
-  document.body.style.position  = 'fixed';
-  document.body.style.top       = `-${_savedScrollY}px`;
-  document.body.style.left      = '0';
-  document.body.style.right     = '0';
-  document.body.style.overflowY = 'scroll';
+  // Только запрещаем скролл — без сдвига страницы
+  document.documentElement.style.overflow = 'hidden';
 }
 
 // restore=true → вернуть на сохранённую позицию (закрытие без навигации)
 // restore=false → просто снять блокировку (при клике на ссылку)
-function unlockScroll(restore = true) {
-  document.body.style.position  = '';
-  document.body.style.top       = '';
-  document.body.style.left      = '';
-  document.body.style.right     = '';
-  document.body.style.overflowY = '';
-  if (restore) {
-    window.scrollTo(0, _savedScrollY);
-  }
+function unlockScroll() {
+  document.documentElement.style.overflow = '';
 }
 
 function useActiveSection(): NavId | '' {
@@ -77,8 +67,8 @@ function useActiveSection(): NavId | '' {
 }
 
 function NavPill({ activeId }: { activeId: string }) {
-  const x  = useMotionValue(0);
-  const w  = useMotionValue(0);
+  const x = useMotionValue(0);
+  const w = useMotionValue(0);
   const sx = useSpring(x, { stiffness: 380, damping: 32 });
   const sw = useSpring(w, { stiffness: 380, damping: 32 });
 
@@ -112,12 +102,12 @@ function NavPill({ activeId }: { activeId: string }) {
 
 // ─── Drawer ───────────────────────────────────────────────────────────────────
 const overlayVariants: Variants = {
-  closed: { opacity: 0, transition: { duration: 0.3,  ease: [0.4, 0, 1, 1] } },
-  open:   { opacity: 1, transition: { duration: 0.35, ease: [0, 0, 0.2, 1] } },
+  closed: { opacity: 0, transition: { duration: 0.3, ease: [0.4, 0, 1, 1] } },
+  open: { opacity: 1, transition: { duration: 0.35, ease: [0, 0, 0.2, 1] } },
 };
 const drawerVariants: Variants = {
   closed: { x: '100%', transition: { duration: 0.35, ease: [0.4, 0, 1, 1] } },
-  open:   { x: 0,      transition: { duration: 0.4,  ease: [0, 0, 0.2, 1] } },
+  open: { x: 0, transition: { duration: 0.4, ease: [0, 0, 0.2, 1] } },
 };
 const linkVariants: Variants = {
   closed: { opacity: 0, x: 24 },
@@ -220,7 +210,7 @@ function MobileDrawer({
 export default function Navbar({ onNavClick }: { onNavClick: (id: string) => void }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
-  const [mounted,  setMounted]  = useState(false);
+  const [mounted, setMounted] = useState(false);
   const activeSection = useActiveSection();
   // флаг: закрываем меню для навигации (не нужно восстанавливать старую позицию)
   const navigatingRef = useRef(false);
@@ -239,7 +229,7 @@ export default function Navbar({ onNavClick }: { onNavClick: (id: string) => voi
     if (menuOpen) {
       lockScroll();
       return () => {
-        unlockScroll(!navigatingRef.current);
+        unlockScroll();
         navigatingRef.current = false;
       };
     }
@@ -247,11 +237,8 @@ export default function Navbar({ onNavClick }: { onNavClick: (id: string) => voi
 
   const handleLink = (id: string) => {
     if (menuOpen) {
-      // Помечаем, что идём к навигации — восстанавливать старую позицию не нужно
       navigatingRef.current = true;
       setMenuOpen(false);
-      // Даём React время завершить cleanup эффекта (unlockScroll без restore),
-      // затем скроллим к нужной секции
       setTimeout(() => onNavClick(id), 60);
     } else {
       onNavClick(id);
@@ -272,10 +259,14 @@ export default function Navbar({ onNavClick }: { onNavClick: (id: string) => voi
     <>
       <header
         className="fixed top-0 left-0 right-0 z-50 transition-shadow duration-500"
-        style={{ boxShadow: scrolled ? '0 4px 32px rgba(0,0,0,0.5)' : 'none' }}
+        style={{
+          ...bgStyle,
+          boxShadow: scrolled ? '0 4px 32px rgba(0,0,0,0.5)' : 'none',
+        }}
       >
         {/* ── Полоса 1 ──────────────────────────────────────────────── */}
-        <div style={{ ...bgStyle, borderBottom: '1px solid rgba(200,169,110,0.12)' }}>
+        <div style={{ borderBottom: '1px solid rgba(200,169,110,0.12)' }}>
+
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 lg:h-[68px] flex items-center justify-between">
 
             <button onClick={() => handleLink('hero')} className="flex items-center gap-2.5 group shrink-0">
@@ -347,7 +338,8 @@ export default function Navbar({ onNavClick }: { onNavClick: (id: string) => voi
         </div>
 
         {/* ── Полоса 2: быстрая навигация (мобиль) ─────────────────── */}
-        <div className="lg:hidden" style={{ ...bgStyle, borderBottom: '1px solid rgba(200,169,110,0.10)' }}>
+        <div className="lg:hidden" style={{ borderBottom: '1px solid rgba(200,169,110,0.10)' }}>
+
           <div className="flex items-center px-3 py-2 gap-2">
             {QUICK_LINKS.map(link => {
               const isActive = activeSection === link.id;
