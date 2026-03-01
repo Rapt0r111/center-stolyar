@@ -92,13 +92,16 @@ body {
 }
 
 /* ─── Swiper overrides ───────────────────────────────────────────────────── */
+/*
+ * ВАЖНО: Не трогаем transform — им полностью управляет EffectCoverflow.
+ * Накладываем только opacity + brightness/saturate на неактивные слайды.
+ * Компонентные стили могут переопределить эти значения через специфичный класс.
+ */
 .swiper-slide {
-  transition: opacity 0.7s var(--ease-spring),
-              filter  0.7s var(--ease-spring),
-              transform 0.7s var(--ease-spring);
+  transition: opacity 0.5s ease, filter 0.5s ease;
+  will-change: opacity, filter;
 }
 .swiper-slide:not(.swiper-slide-active) {
-  opacity: 0.3;
-  filter: blur(4px);
-  transform: scale(0.9);
+  opacity: 0.38;
+  filter: brightness(0.52) saturate(0.65);
 }

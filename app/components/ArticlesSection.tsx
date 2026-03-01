@@ -1,16 +1,20 @@
 'use client';
 
 /**
- * ArticlesSection.tsx — ОПТИМИЗИРОВАННАЯ ВЕРСИЯ
+ * ArticlesSection.tsx — УЛУЧШЕННАЯ ВЕРСИЯ
  *
- * Изменения vs оригинал:
- * ───────────────────────────────────────────────────────────────
- * 1. ArticleModal: blurDataURL заменён на ImageSkeleton — нет "мыла"
- * 2. Preload: изображение статьи начинает грузиться при hover на карточку
- *    (было: только при hover, но без правильного /_next/image URL)
- * 3. Правильный nextImageUrl через preloader singleton — кэш браузера
- *    гарантированно сработает когда <Image priority /> запросит тот же URL
- * 4. ArticleModal использует layoutId для zoom-анимации из карточки
+ * Изменения:
+ * ─────────────────────────────────────────────────────────────────
+ * 1. Убран CSS-override блок с !important — globals.css теперь
+ *    корректно затемняет соседние слайды.
+ *    Активный слайд сохраняет полную яркость через .swiper-slide-active.
+ *
+ * 2. Анимация открытия модалки статьи: плавный tween вместо Spring.
+ *    - Backdrop: 220ms ease-out
+ *    - Panel: scale(0.95→1) + opacity за 380ms с custom easing
+ *    - layoutId transition унифицирован с GallerySection
+ *
+ * 3. Preloading без изменений.
  */
 
 import { ArrowRight, Calendar, ChevronLeft, ChevronRight, X } from 'lucide-react';
@@ -29,6 +33,13 @@ import { motion, AnimatePresence, LayoutGroup } from 'framer-motion';
 
 import 'swiper/css';
 import 'swiper/css/effect-coverflow';
+
+// Унифицированный transition для layoutId — tween, предсказуем на мобилке
+const LAYOUT_TRANSITION = {
+  type: 'tween' as const,
+  ease: [0.25, 0.46, 0.45, 0.94] as [number, number, number, number],
+  duration: 0.38,
+};
 
 // ─── Article Modal ─────────────────────────────────────────────────────────────
 function ArticleModal({ article, onClose }: { article: Article; onClose: () => void }) {
@@ -58,12 +69,12 @@ function ArticleModal({ article, onClose }: { article: Article; onClose: () => v
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
-        transition={{ duration: 0.25 }}
+        transition={{ duration: 0.22, ease: 'easeOut' }}
         className="absolute inset-0 bg-black/80 backdrop-blur-md"
         onClick={onClose}
       />
 
-      {/* Panel — layoutId совпадает с карточкой статьи */}
+      {/* Panel */}
       <motion.div
         layoutId={`article-card-${article.id}`}
         className="relative w-full sm:max-w-2xl rounded-t-3xl sm:rounded-3xl overflow-hidden z-10 flex flex-col"
@@ -73,11 +84,11 @@ function ArticleModal({ article, onClose }: { article: Article; onClose: () => v
           boxShadow: '0 32px 80px rgba(0,0,0,0.7)',
           maxHeight: '92vh',
         }}
-        transition={{ type: 'spring', damping: 30, stiffness: 280 }}
+        transition={LAYOUT_TRANSITION}
+
       >
         {/* Cover image */}
         <div className="relative h-52 sm:h-64 shrink-0 bg-[#1a1008]">
-          {/* Skeleton вместо blur */}
           <ImageSkeleton loaded={imgLoaded} />
 
           <Image
@@ -86,9 +97,8 @@ function ArticleModal({ article, onClose }: { article: Article; onClose: () => v
             fill
             className="object-cover"
             sizes="(max-width: 640px) 100vw, 672px"
-            priority  // Модалка открыта — грузим сразу
+            priority
             quality={88}
-            // blurDataURL убран — ImageSkeleton выглядит гораздо лучше
             onLoad={() => setImgLoaded(true)}
           />
           <div className="absolute inset-0 bg-gradient-to-t from-[#150d05] via-transparent to-transparent opacity-90" />
@@ -167,22 +177,16 @@ export default function ArticlesSection() {
     return () => obs.disconnect();
   }, []);
 
-  // Preload всех изображений статей когда секция становится видимой
   useEffect(() => {
     if (!visible) return;
     preloader.preloadMany(ARTICLES.map(a => a.image), ARTICLE_MODAL_WIDTH);
   }, [visible]);
 
-  // Hover на карточку → preload (с правильным URL через nextImageUrl)
   const handleCardHover = useCallback((article: Article) => {
     preloader.preload(article.image, ARTICLE_MODAL_WIDTH, 88);
   }, []);
 
   return (
-    /*
-     * LayoutGroup нужен, чтобы layoutId работал между SwiperSlide и модалкой.
-     * id уникальный — чтобы не конфликтовал с gallery LayoutGroup.
-     */
     <LayoutGroup id="articles-section">
       <section
         id="articles"
@@ -214,8 +218,8 @@ export default function ArticlesSection() {
 
           {/* Slider */}
           <div className={cn(
-            'relative transition-all duration-1000 ease-out',
-            visible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'
+            'relative transition-all duration-700 ease-out',
+            visible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-6'
           )}>
             <button
               onClick={() => swiperRef.current?.slidePrev()}
@@ -232,93 +236,97 @@ export default function ArticlesSection() {
               <ChevronRight className="w-6 h-6 lg:w-8 lg:h-8 group-hover:translate-x-1 transition-transform" />
             </button>
 
+            {/*
+             * articles-coverflow-swiper: только фиксируем активный слайд —
+             * остальное (затемнение соседей) делает globals.css.
+             */}
             <style>{`
-              .articles-coverflow-swiper .swiper-slide,
-              .articles-coverflow-swiper .swiper-slide:not(.swiper-slide-active) {
+              .articles-coverflow-swiper .swiper-slide-active {
                 opacity: 1 !important;
                 filter: none !important;
-                transform: none !important;
               }
             `}</style>
 
             <div className="articles-coverflow-swiper">
-            <Swiper
-              modules={[Autoplay, EffectCoverflow]}
-              onSwiper={swiper => { swiperRef.current = swiper; }}
-              effect="coverflow"
-              grabCursor
-              centeredSlides
-              slidesPerView="auto"
-              slideToClickedSlide
-              coverflowEffect={{ rotate: 0, stretch: 0, depth: 100, modifier: 2.5, slideShadows: false }}
-              autoplay={{ delay: 5000, disableOnInteraction: true }}
-              watchSlidesProgress
-            >
-              {ARTICLES.map((a, i) => (
-                <SwiperSlide key={a.id} className="!w-[85%] sm:!w-[420px] h-auto">
-                  {/*
-                   * layoutId на карточке — источник анимации.
-                   * Модалка использует тот же layoutId и "вырастает" из карточки.
-                   */}
-                  <motion.article
-                    layoutId={`article-card-${a.id}`}
-                    onClick={() => setActiveArticle(a)}
-                    onMouseEnter={() => handleCardHover(a)}
-                    onTouchStart={() => handleCardHover(a)}
-                    className="group relative h-full rounded-3xl overflow-hidden flex flex-col cursor-pointer shadow-2xl bg-[#1a1008]/80 backdrop-blur-xl"
-                    style={{ border: '1px solid rgba(200,169,110,0.1)' }}
-                    transition={{ type: 'spring', damping: 30, stiffness: 280 }}
-                  >
-                    <div className="h-64 relative overflow-hidden w-full shrink-0">
-                      <Image
-                        src={a.image}
-                        alt={a.title}
-                        fill
-                        className="object-cover transition-transform duration-1000 group-hover:scale-110"
-                        sizes="(max-width: 768px) 85vw, 420px"
-                        priority={i < 2}
-                        loading={i < 2 ? undefined : 'lazy'}
-                        quality={80}
-                        placeholder="blur"
-                        blurDataURL="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDIwIiBoZWlnaHQ9IjI1NiIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iNDIwIiBoZWlnaHQ9IjI1NiIgZmlsbD0iIzFhMTAwOCIvPjwvc3ZnPg=="
-                      />
-                      <div className="absolute inset-0 bg-gradient-to-t from-[#1a1008] via-transparent to-transparent opacity-90" />
-                      <div
-                        className="absolute top-4 right-4 bg-black/40 backdrop-blur-md px-3 py-1 rounded-full flex items-center gap-1.5 text-[10px] text-white/90 font-medium uppercase tracking-wider"
-                        style={{ border: '1px solid rgba(255,255,255,0.1)' }}
-                      >
-                        <Calendar className="w-3 h-3 text-[#c8a96e]" />
-                        {a.date}
+              <Swiper
+                modules={[Autoplay, EffectCoverflow]}
+                onSwiper={swiper => { swiperRef.current = swiper; }}
+                effect="coverflow"
+                grabCursor
+                centeredSlides
+                slidesPerView="auto"
+                slideToClickedSlide
+                coverflowEffect={{
+                  rotate: 0,
+                  stretch: 0,
+                  depth: 120,
+                  modifier: 2,
+                  slideShadows: false,
+                }}
+                autoplay={{ delay: 5000, disableOnInteraction: true }}
+                watchSlidesProgress
+              >
+                {ARTICLES.map((a, i) => (
+                  <SwiperSlide key={a.id} className="!w-[85%] sm:!w-[420px] h-auto">
+                    <motion.article
+                      layoutId={`article-card-${a.id}`}
+                      onClick={() => setActiveArticle(a)}
+                      onMouseEnter={() => handleCardHover(a)}
+                      onTouchStart={() => handleCardHover(a)}
+                      className="group relative h-full rounded-3xl overflow-hidden flex flex-col cursor-pointer shadow-2xl bg-[#1a1008]/80 backdrop-blur-xl"
+                      style={{ border: '1px solid rgba(200,169,110,0.1)' }}
+                      transition={LAYOUT_TRANSITION}
+                    >
+                      <div className="h-64 relative overflow-hidden w-full shrink-0">
+                        <Image
+                          src={a.image}
+                          alt={a.title}
+                          fill
+                          className="object-cover transition-transform duration-700 group-hover:scale-110"
+                          sizes="(max-width: 768px) 85vw, 420px"
+                          priority={i < 2}
+                          loading={i < 2 ? undefined : 'lazy'}
+                          quality={80}
+                          placeholder="blur"
+                          blurDataURL="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDIwIiBoZWlnaHQ9IjI1NiIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iNDIwIiBoZWlnaHQ9IjI1NiIgZmlsbD0iIzFhMTAwOCIvPjwvc3ZnPg=="
+                        />
+                        <div className="absolute inset-0 bg-gradient-to-t from-[#1a1008] via-transparent to-transparent opacity-90" />
+                        <div
+                          className="absolute top-4 right-4 bg-black/40 backdrop-blur-md px-3 py-1 rounded-full flex items-center gap-1.5 text-[10px] text-white/90 font-medium uppercase tracking-wider"
+                          style={{ border: '1px solid rgba(255,255,255,0.1)' }}
+                        >
+                          <Calendar className="w-3 h-3 text-[#c8a96e]" />
+                          {a.date}
+                        </div>
                       </div>
-                    </div>
 
-                    <div className="p-8 flex-grow flex flex-col -mt-8 bg-gradient-to-b from-transparent to-[#1a1008]">
-                      <span className="inline-block px-3 py-1 mb-4 rounded-full bg-[#c8a96e] text-[#1a1008] text-[10px] font-bold tracking-[0.15em] uppercase self-start shadow-lg shadow-[#c8a96e]/20">
-                        {a.tag}
-                      </span>
-                      <h3
-                        className="text-white font-semibold text-xl lg:text-2xl leading-snug mb-4 group-hover:text-[#c8a96e] transition-colors flex-grow"
-                        style={{ fontFamily: 'Georgia, serif' }}
-                      >
-                        {a.title}
-                      </h3>
-                      <p className="text-white/50 text-sm leading-relaxed mb-8 line-clamp-3">
-                        {a.excerpt}
-                      </p>
-                      <div
-                        className="mt-auto pt-5 flex items-center justify-between"
-                        style={{ borderTop: '1px solid rgba(255,255,255,0.05)' }}
-                      >
-                        <span className="text-[#c8a96e] text-sm font-bold uppercase tracking-widest group-hover:text-[#d4b87e] transition-colors flex items-center gap-2">
-                          Читать полностью
-                          <ArrowRight className="w-4 h-4 opacity-0 -translate-x-2 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-300" />
+                      <div className="p-8 flex-grow flex flex-col -mt-8 bg-gradient-to-b from-transparent to-[#1a1008]">
+                        <span className="inline-block px-3 py-1 mb-4 rounded-full bg-[#c8a96e] text-[#1a1008] text-[10px] font-bold tracking-[0.15em] uppercase self-start shadow-lg shadow-[#c8a96e]/20">
+                          {a.tag}
                         </span>
+                        <h3
+                          className="text-white font-semibold text-xl lg:text-2xl leading-snug mb-4 group-hover:text-[#c8a96e] transition-colors flex-grow"
+                          style={{ fontFamily: 'Georgia, serif' }}
+                        >
+                          {a.title}
+                        </h3>
+                        <p className="text-white/50 text-sm leading-relaxed mb-8 line-clamp-3">
+                          {a.excerpt}
+                        </p>
+                        <div
+                          className="mt-auto pt-5 flex items-center justify-between"
+                          style={{ borderTop: '1px solid rgba(255,255,255,0.05)' }}
+                        >
+                          <span className="text-[#c8a96e] text-sm font-bold uppercase tracking-widest group-hover:text-[#d4b87e] transition-colors flex items-center gap-2">
+                            Читать полностью
+                            <ArrowRight className="w-4 h-4 opacity-0 -translate-x-2 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-300" />
+                          </span>
+                        </div>
                       </div>
-                    </div>
-                  </motion.article>
-                </SwiperSlide>
-              ))}
-            </Swiper>
+                    </motion.article>
+                  </SwiperSlide>
+                ))}
+              </Swiper>
             </div>
           </div>
         </div>

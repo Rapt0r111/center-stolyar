@@ -1,29 +1,21 @@
 'use client';
 
 /**
- * GallerySection.tsx — ОПТИМИЗИРОВАННАЯ ВЕРСИЯ
+ * GallerySection.tsx — УЛУЧШЕННАЯ ВЕРСИЯ
  *
- * Ключевые изменения vs оригинал:
+ * Изменения:
  * ─────────────────────────────────────────────────────────────────
- * 1. PRELOADING
- *    • Инициализация: первые 3 слайда грузятся сразу в idle callback
- *    • onSlideChange: соседи нового слайда грузятся немедленно
- *    • onMouseEnter / onTouchStart: полноэкранная версия грузится на hover
+ * 1. SWIPER: убраны CSS-override блоки с !important.
+ *    globals.css теперь корректно затемняет неактивные слайды,
+ *    а transform оставлен EffectCoverflow.
  *
- * 2. LAYOUT ANIMATION (Framer Motion layoutId)
- *    • SlideCard и Lightbox используют один и тот же layoutId
- *    • При открытии лайтбокса: изображение "вырастает" из миниатюры
- *    • При закрытии: "сворачивается" обратно в карточку
+ * 2. АНИМАЦИЯ ОТКРЫТИЯ: заменены Spring-переходы на более
+ *    производительные tween с кастомным easing.
+ *    - Лайтбокс: плавное scale(0.96→1) + opacity за 380ms
+ *    - layoutId сохранён для zoom-из-карточки, но с более
+ *      предсказуемым тайминг-функцией на мобилке.
  *
- * 3. SKELETON
- *    • blurDataURL убран из лайтбокса — вместо него ImageSkeleton
- *    • В карточках blur оставлен (они маленькие, там это OK)
- *    • В лайтбоксе: показываем skeleton ТОЛЬКО если фото не preloaded
- *
- * 4. INSTANT LIGHTBOX
- *    • При открытии лайтбокса activeItem передаётся напрямую (не через индекс)
- *    • priority={true} на активном изображении
- *    • Соседи рендерятся заранее (opacity:0) с loading="eager"
+ * 3. PRELOADING: без изменений (уже оптимизировано)
  */
 
 import { useState, useEffect, useRef, useCallback } from 'react';
@@ -49,6 +41,14 @@ import {
 import 'swiper/css';
 import 'swiper/css/effect-coverflow';
 
+// Общий transition для layoutId анимаций — плавный tween вместо Spring
+// Spring бывает нестабилен на слабых мобилках.
+const LAYOUT_TRANSITION = {
+  type: 'tween' as const,
+  ease: [0.25, 0.46, 0.45, 0.94] as [number, number, number, number],
+  duration: 0.38,
+};
+
 // ─── Lightbox ─────────────────────────────────────────────────────────────────
 interface LightboxProps {
   images: GalleryItem[];
@@ -58,7 +58,6 @@ interface LightboxProps {
 }
 
 function Lightbox({ images, activeItem, onClose, onNavigate }: LightboxProps) {
-  // Состояние загрузки активного изображения
   const [imgLoaded, setImgLoaded] = useState(false);
   const shouldReduceMotion = useReducedMotion();
 
@@ -68,7 +67,6 @@ function Lightbox({ images, activeItem, onClose, onNavigate }: LightboxProps) {
     const prevItem = images[(currentIdx - 1 + images.length) % images.length];
     setImgLoaded(false);
     onNavigate(prevItem);
-    // Preload следующего за новым текущим
     const nextOfPrev = images[(currentIdx - 2 + images.length) % images.length];
     preloader.preload(nextOfPrev.src, LIGHTBOX_WIDTH);
   }, [images, currentIdx, onNavigate]);
@@ -77,12 +75,10 @@ function Lightbox({ images, activeItem, onClose, onNavigate }: LightboxProps) {
     const nextItem = images[(currentIdx + 1) % images.length];
     setImgLoaded(false);
     onNavigate(nextItem);
-    // Preload следующего за новым текущим
     const nextOfNext = images[(currentIdx + 2) % images.length];
     preloader.preload(nextOfNext.src, LIGHTBOX_WIDTH);
   }, [images, currentIdx, onNavigate]);
 
-  // Keyboard nav
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose();
@@ -93,13 +89,11 @@ function Lightbox({ images, activeItem, onClose, onNavigate }: LightboxProps) {
     return () => window.removeEventListener('keydown', handler);
   }, [onClose, goNext, goPrev]);
 
-  // Scroll lock
   useEffect(() => {
     document.body.style.overflow = 'hidden';
     return () => { document.body.style.overflow = ''; };
   }, []);
 
-  // Сбрасываем loaded при смене фото
   useEffect(() => {
     setImgLoaded(false);
   }, [activeItem.id]);
@@ -111,40 +105,40 @@ function Lightbox({ images, activeItem, onClose, onNavigate }: LightboxProps) {
       aria-modal="true"
       aria-label={`Галерея: ${activeItem.label}`}
     >
-      {/* ── Backdrop ────────────────────────────────────────────────────────── */}
+      {/* Backdrop */}
       <motion.div
         className="absolute inset-0 bg-black/95 backdrop-blur-2xl cursor-pointer"
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
-        transition={{ duration: 0.2 }}
+        transition={{ duration: 0.22, ease: 'easeOut' }}
         onClick={onClose}
       />
 
-      {/* ── Close ───────────────────────────────────────────────────────────── */}
+      {/* Close */}
       <motion.button
         aria-label="Закрыть"
         onClick={onClose}
         className="absolute top-5 right-5 z-20 p-2.5 rounded-full text-white/50 hover:text-white hover:bg-white/10 transition-colors"
-        initial={{ opacity: 0, scale: 0.8 }}
+        initial={{ opacity: 0, scale: 0.75 }}
         animate={{ opacity: 1, scale: 1 }}
-        transition={{ delay: 0.15 }}
+        transition={{ delay: 0.18, duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
         whileHover={{ rotate: 90 }}
         whileTap={{ scale: 0.9 }}
       >
         <X className="w-7 h-7" />
       </motion.button>
 
-      {/* ── Navigation buttons ──────────────────────────────────────────────── */}
+      {/* Navigation */}
       {images.length > 1 && (
         <>
           <motion.button
             aria-label="Предыдущее фото"
             onClick={e => { e.stopPropagation(); goPrev(); }}
             className="absolute left-4 top-1/2 -translate-y-1/2 z-20 p-3 rounded-full text-white/50 hover:text-[#c8a96e] hover:bg-white/5 transition-all"
-            initial={{ opacity: 0, x: -16 }}
+            initial={{ opacity: 0, x: -20 }}
             animate={{ opacity: 1, x: 0 }}
-            transition={{ delay: 0.15 }}
+            transition={{ delay: 0.16, duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
             whileHover={{ x: -3 }}
             whileTap={{ scale: 0.9 }}
           >
@@ -154,9 +148,9 @@ function Lightbox({ images, activeItem, onClose, onNavigate }: LightboxProps) {
             aria-label="Следующее фото"
             onClick={e => { e.stopPropagation(); goNext(); }}
             className="absolute right-4 top-1/2 -translate-y-1/2 z-20 p-3 rounded-full text-white/50 hover:text-[#c8a96e] hover:bg-white/5 transition-all"
-            initial={{ opacity: 0, x: 16 }}
+            initial={{ opacity: 0, x: 20 }}
             animate={{ opacity: 1, x: 0 }}
-            transition={{ delay: 0.15 }}
+            transition={{ delay: 0.16, duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
             whileHover={{ x: 3 }}
             whileTap={{ scale: 0.9 }}
           >
@@ -165,11 +159,7 @@ function Lightbox({ images, activeItem, onClose, onNavigate }: LightboxProps) {
         </>
       )}
 
-      {/* ── Image container — ключевой элемент с layoutId ────────────────────
-          layoutId совпадает с тем, что задан в SlideCard.
-          Framer Motion анимирует позицию/размер от миниатюры до полного экрана.
-          При закрытии — обратно.
-      ─────────────────────────────────────────────────────────────────────── */}
+      {/* Image container — layoutId zoom from card */}
       <motion.div
         layoutId={`gallery-img-${activeItem.id}`}
         className="relative z-10 cursor-default"
@@ -178,35 +168,23 @@ function Lightbox({ images, activeItem, onClose, onNavigate }: LightboxProps) {
           maxWidth: '1100px',
           height: '80vh',
         }}
-        // Fallback анимация для браузеров / если layoutId не нашёл источник
-        initial={shouldReduceMotion ? {} : { opacity: 0.6 }}
-        animate={{ opacity: 1 }}
-        exit={{ opacity: 0 }}
-        transition={{ type: 'spring', damping: 28, stiffness: 240 }}
+        initial={shouldReduceMotion ? {} : { opacity: 0.5, scale: 0.96 }}
+        animate={{ opacity: 1, scale: 1 }}
+        exit={{ opacity: 0, scale: 0.96 }}
+        transition={LAYOUT_TRANSITION}
         onClick={e => e.stopPropagation()}
       >
-        {/* Rounded corners анимируются вместе с layoutId */}
         <motion.div
           layoutId={`gallery-corner-${activeItem.id}`}
           className="absolute inset-0 overflow-hidden"
           style={{ borderRadius: 16 }}
           animate={{ borderRadius: 12 }}
-          transition={{ type: 'spring', damping: 28, stiffness: 240 }}
+          transition={LAYOUT_TRANSITION}
         >
-          {/* Skeleton — показываем только если фото ещё не в кэше */}
           <ImageSkeleton loaded={imgLoaded} />
 
-          {/*
-           * priority={true} — браузер грузит это изображение с максимальным
-           * приоритетом, вытесняя фоновые загрузки.
-           *
-           * sizes="90vw" — сообщаем Next.js реальный размер отображения,
-           * чтобы выбрать правильный srcset-вариант.
-           *
-           * quality={90} — в лайтбоксе хочется максимального качества.
-           */}
           <Image
-            key={activeItem.id} // key = перемонтировать при смене фото
+            key={activeItem.id}
             src={activeItem.src}
             alt={activeItem.label}
             fill
@@ -221,21 +199,21 @@ function Lightbox({ images, activeItem, onClose, onNavigate }: LightboxProps) {
         {/* Caption */}
         <motion.div
           className="absolute -bottom-8 left-0 right-0 text-center"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 0.3 }}
+          initial={{ opacity: 0, y: 6 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.28, duration: 0.25 }}
         >
           <p className="text-white/50 text-sm">{activeItem.label}</p>
         </motion.div>
       </motion.div>
 
-      {/* ── Dot indicator ───────────────────────────────────────────────────── */}
+      {/* Dot indicator */}
       {images.length > 1 && (
         <motion.div
           className="absolute bottom-6 left-1/2 -translate-x-1/2 flex gap-2 z-20"
-          initial={{ opacity: 0, y: 8 }}
+          initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.2 }}
+          transition={{ delay: 0.2, duration: 0.25 }}
         >
           {images.map(item => (
             <button
@@ -266,13 +244,6 @@ function SlideCard({ item, isPriority, onClick, onHoverStart }: SlideCardProps) 
   const [thumbLoaded, setThumbLoaded] = useState(false);
 
   return (
-    /*
-     * motion.div с layoutId — "исток" анимации.
-     * Когда лайтбокс открывается с тем же layoutId, Framer Motion
-     * считает начальную позицию/размер этого элемента и анимирует к цели.
-     *
-     * ВАЖНО: layoutId должен быть уникальным — используем id элемента.
-     */
     <motion.div
       layoutId={`gallery-img-${item.id}`}
       onClick={onClick}
@@ -281,28 +252,27 @@ function SlideCard({ item, isPriority, onClick, onHoverStart }: SlideCardProps) 
       className="group relative h-[550px] rounded-3xl overflow-hidden cursor-pointer shadow-2xl"
       style={{ border: '1px solid rgba(255,255,255,0.05)' }}
       whileHover={{ scale: 1.01 }}
-      transition={{ type: 'spring', damping: 30, stiffness: 300 }}
+      transition={LAYOUT_TRANSITION}
     >
-      {/* Corner radius "участвует" в layoutId-анимации через свой layoutId */}
       <motion.div
         layoutId={`gallery-corner-${item.id}`}
         className="absolute inset-0 overflow-hidden"
         style={{ borderRadius: 24 }}
+        transition={LAYOUT_TRANSITION}
       >
-        {/* Skeleton для миниатюры */}
         <ImageSkeleton loaded={thumbLoaded} />
 
         <Image
           src={item.src}
           alt={item.label}
           fill
-          className="object-cover transition-transform duration-1000 group-hover:scale-110"
+          className="object-cover transition-transform duration-700 group-hover:scale-110"
           sizes="(max-width: 640px) 80vw, 450px"
           priority={isPriority}
           loading={isPriority ? undefined : 'lazy'}
           quality={80}
           placeholder="blur"
-          blurDataURL={BLUR.gallery} // blur оставляем для миниатюр — они маленькие
+          blurDataURL={BLUR.gallery}
           onLoad={() => setThumbLoaded(true)}
         />
         <div className="absolute inset-0 bg-gradient-to-t from-[#1a1008] via-transparent to-transparent opacity-80" />
@@ -337,7 +307,6 @@ export default function GallerySection() {
     ? GALLERY_ITEMS
     : GALLERY_ITEMS.filter(i => i.cat === filter);
 
-  // ── IntersectionObserver для fade-in секции ──────────────────────────────
   useEffect(() => {
     const obs = new IntersectionObserver(
       ([e]) => { if (e.isIntersecting) setVisible(true); },
@@ -347,14 +316,9 @@ export default function GallerySection() {
     return () => obs.disconnect();
   }, []);
 
-  // ── Preload при инициализации (первые 3 слайда + ленивые остальные) ──────
   useEffect(() => {
     if (!visible) return;
-
-    // Первые 3 — сразу и с высоким приоритетом
     filtered.slice(0, 3).forEach(item => preloader.preload(item.src, LIGHTBOX_WIDTH));
-
-    // Остальные — через idle callback, чтобы не мешать LCP
     preloader.preloadMany(
       filtered.slice(3).map(i => i.src),
       LIGHTBOX_WIDTH
@@ -362,17 +326,14 @@ export default function GallerySection() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visible, filter]);
 
-  // ── Сброс слайдера при смене фильтра ────────────────────────────────────
   useEffect(() => {
     if (swiperRef.current) swiperRef.current.slideTo(0, 0);
     setActiveIndex(0);
   }, [filter]);
 
-  // ── Preload соседей при смене слайда ────────────────────────────────────
   const handleSlideChange = useCallback((swiper: SwiperType) => {
     const idx = swiper.realIndex;
     setActiveIndex(idx);
-
     const neighbors = [
       filtered[(idx + 1) % filtered.length],
       filtered[(idx - 1 + filtered.length) % filtered.length],
@@ -380,15 +341,12 @@ export default function GallerySection() {
     neighbors.forEach(item => preloader.preload(item.src, LIGHTBOX_WIDTH));
   }, [filtered]);
 
-  // ── Hover → preload полноэкранной версии ────────────────────────────────
   const handleCardHover = useCallback((item: GalleryItem) => {
     preloader.preload(item.src, LIGHTBOX_WIDTH);
   }, []);
 
-  // ── Лайтбокс: открытие / навигация ──────────────────────────────────────
   const handleCardClick = useCallback((item: GalleryItem) => {
     setActiveItem(item);
-    // Preload соседей сразу при открытии лайтбокса
     const idx = filtered.findIndex(i => i.id === item.id);
     const neighbors = [
       filtered[(idx + 1) % filtered.length],
@@ -398,11 +356,6 @@ export default function GallerySection() {
   }, [filtered]);
 
   return (
-    /*
-     * LayoutGroup оборачивает и карусель, и лайтбокс.
-     * Это позволяет Framer Motion корректно синхронизировать layoutId
-     * между двумя компонентами даже если они в разных ветвях DOM.
-     */
     <LayoutGroup id="gallery-section">
       <section
         id="gallery"
@@ -412,7 +365,7 @@ export default function GallerySection() {
       >
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
 
-          {/* ── Header ──────────────────────────────────────────────────── */}
+          {/* Header */}
           <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-12">
             <div>
               <div className="flex items-center gap-4 mb-4">
@@ -424,7 +377,7 @@ export default function GallerySection() {
               </h2>
             </div>
 
-            {/* ── Filters ───────────────────────────────────────────────── */}
+            {/* Filters */}
             <div className="flex flex-wrap gap-2" role="tablist">
               {GALLERY_CATEGORIES.map(cat => (
                 <motion.button
@@ -432,7 +385,6 @@ export default function GallerySection() {
                   role="tab"
                   aria-selected={filter === cat}
                   onClick={() => setFilter(cat)}
-                  // Preload фотографий этой категории при наведении
                   onMouseEnter={() => {
                     const catItems = cat === 'Все'
                       ? GALLERY_ITEMS
@@ -454,10 +406,10 @@ export default function GallerySection() {
             </div>
           </div>
 
-          {/* ── Carousel ────────────────────────────────────────────────── */}
+          {/* Carousel */}
           <div className={cn(
-            'relative transition-all duration-1000 ease-out',
-            visible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'
+            'relative transition-all duration-700 ease-out',
+            visible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-6'
           )}>
             <button
               onClick={() => swiperRef.current?.slidePrev()}
@@ -475,24 +427,15 @@ export default function GallerySection() {
             </button>
 
             {/*
-             * gallery-coverflow-swiper — класс-изолятор.
-             * EffectCoverflow сам управляет 3D-позицией слайдов через
-             * CSS matrix3d. Глобальное правило в globals.css накладывает
-             * поверх него transform: scale(0.9), что ломает z-порядок
-             * и создаёт наслоение карточек. Сбрасываем его здесь.
+             * gallery-coverflow-swiper: НЕ сбрасываем transform — он нужен
+             * EffectCoverflow для 3D-перспективы. Только убираем возможные
+             * паразитные opacity/filter-переопределения от globals.css,
+             * чтобы активный слайд всегда был 100% видимым.
              */}
             <style>{`
-              .gallery-coverflow-swiper .swiper-slide {
+              .gallery-coverflow-swiper .swiper-slide-active {
                 opacity: 1 !important;
                 filter: none !important;
-                transform: none !important;
-                /* EffectCoverflow применяет трансформации сам через
-                   inline style — не мешаем ему */
-              }
-              .gallery-coverflow-swiper .swiper-slide:not(.swiper-slide-active) {
-                opacity: 1 !important;
-                filter: none !important;
-                transform: none !important;
               }
             `}</style>
 
@@ -503,7 +446,13 @@ export default function GallerySection() {
                 grabCursor
                 centeredSlides
                 slidesPerView="auto"
-                coverflowEffect={{ rotate: 0, stretch: 0, depth: 160, modifier: 2, slideShadows: false }}
+                coverflowEffect={{
+                  rotate: 0,
+                  stretch: 0,
+                  depth: 200,
+                  modifier: 1.8,
+                  slideShadows: false,
+                }}
                 autoplay={{ delay: 5000, disableOnInteraction: true }}
                 watchSlidesProgress
                 onSlideChange={handleSlideChange}
@@ -525,7 +474,7 @@ export default function GallerySection() {
         </div>
       </section>
 
-      {/* ── Lightbox — AnimatePresence для mount/unmount анимации ────────── */}
+      {/* Lightbox */}
       <AnimatePresence mode="wait">
         {activeItem && (
           <Lightbox
