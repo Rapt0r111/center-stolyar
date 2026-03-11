@@ -1,22 +1,5 @@
 'use client';
 
-/**
- * ArticlesSection.tsx — УЛУЧШЕННАЯ ВЕРСИЯ
- *
- * Изменения:
- * ─────────────────────────────────────────────────────────────────
- * 1. Убран CSS-override блок с !important — globals.css теперь
- *    корректно затемняет соседние слайды.
- *    Активный слайд сохраняет полную яркость через .swiper-slide-active.
- *
- * 2. Анимация открытия модалки статьи: плавный tween вместо Spring.
- *    - Backdrop: 220ms ease-out
- *    - Panel: scale(0.95→1) + opacity за 380ms с custom easing
- *    - layoutId transition унифицирован с GallerySection
- *
- * 3. Preloading без изменений.
- */
-
 import { ArrowRight, Calendar, ChevronLeft, ChevronRight, X } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import Image from 'next/image';
@@ -34,7 +17,6 @@ import { motion, AnimatePresence, LayoutGroup } from 'framer-motion';
 import 'swiper/css';
 import 'swiper/css/effect-coverflow';
 
-// Унифицированный transition для layoutId — tween, предсказуем на мобилке
 const LAYOUT_TRANSITION = {
   type: 'tween' as const,
   ease: [0.25, 0.46, 0.45, 0.94] as [number, number, number, number],
@@ -64,7 +46,6 @@ function ArticleModal({ article, onClose }: { article: Article; onClose: () => v
       aria-modal="true"
       aria-label={article.title}
     >
-      {/* Backdrop */}
       <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
@@ -73,8 +54,6 @@ function ArticleModal({ article, onClose }: { article: Article; onClose: () => v
         className="absolute inset-0 bg-black/80 backdrop-blur-md"
         onClick={onClose}
       />
-
-      {/* Panel */}
       <motion.div
         layoutId={`article-card-${article.id}`}
         className="relative w-full sm:max-w-2xl rounded-t-3xl sm:rounded-3xl overflow-hidden z-10 flex flex-col"
@@ -85,12 +64,9 @@ function ArticleModal({ article, onClose }: { article: Article; onClose: () => v
           maxHeight: '92vh',
         }}
         transition={LAYOUT_TRANSITION}
-
       >
-        {/* Cover image */}
         <div className="relative h-52 sm:h-64 shrink-0 bg-[#1a1008]">
           <ImageSkeleton loaded={imgLoaded} />
-
           <Image
             src={article.image}
             alt={article.title}
@@ -102,7 +78,6 @@ function ArticleModal({ article, onClose }: { article: Article; onClose: () => v
             onLoad={() => setImgLoaded(true)}
           />
           <div className="absolute inset-0 bg-gradient-to-t from-[#150d05] via-transparent to-transparent opacity-90" />
-
           <button
             onClick={onClose}
             aria-label="Закрыть"
@@ -110,7 +85,6 @@ function ArticleModal({ article, onClose }: { article: Article; onClose: () => v
           >
             <X className="w-4 h-4" />
           </button>
-
           <div
             className="absolute top-4 left-4 flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] text-white/90 font-medium uppercase tracking-wider backdrop-blur-md"
             style={{ background: 'rgba(0,0,0,0.45)', border: '1px solid rgba(255,255,255,0.1)' }}
@@ -120,7 +94,6 @@ function ArticleModal({ article, onClose }: { article: Article; onClose: () => v
           </div>
         </div>
 
-        {/* Content */}
         <div className="flex-1 overflow-y-auto overscroll-contain">
           <div className="p-6 sm:p-8">
             <span className="inline-block px-3 py-1 mb-4 rounded-full bg-[#c8a96e] text-[#1a1008] text-[10px] font-bold tracking-[0.15em] uppercase shadow-lg shadow-[#c8a96e]/20">
@@ -134,9 +107,7 @@ function ArticleModal({ article, onClose }: { article: Article; onClose: () => v
             </h2>
             <div className="space-y-4">
               {paragraphs.map((para, i) => (
-                <p key={i} className="text-white/70 text-sm sm:text-base leading-relaxed">
-                  {para}
-                </p>
+                <p key={i} className="text-white/70 text-sm sm:text-base leading-relaxed">{para}</p>
               ))}
             </div>
             <div
@@ -154,7 +125,6 @@ function ArticleModal({ article, onClose }: { article: Article; onClose: () => v
             </div>
           </div>
         </div>
-
         <div className="sm:hidden absolute top-3 left-1/2 -translate-x-1/2 w-10 h-1 rounded-full bg-white/20" />
       </motion.div>
     </div>
@@ -196,7 +166,6 @@ export default function ArticlesSection() {
       >
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
 
-          {/* Header */}
           <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-12">
             <div>
               <div className="flex items-center gap-4 mb-4">
@@ -216,7 +185,6 @@ export default function ArticlesSection() {
             </button>
           </div>
 
-          {/* Slider */}
           <div className={cn(
             'relative transition-all duration-700 ease-out',
             visible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-6'
@@ -237,13 +205,28 @@ export default function ArticlesSection() {
             </button>
 
             {/*
-             * articles-coverflow-swiper: только фиксируем активный слайд —
-             * остальное (затемнение соседей) делает globals.css.
+             * Ключевое исправление наслоения слайдов:
+             * - z-index !important переопределяет Swiper inline styles
+             * - depth 350 уводит дальние слайды глубже в 3D
              */}
             <style>{`
+              .articles-coverflow-swiper .swiper {
+                overflow: visible;
+              }
+              .articles-coverflow-swiper .swiper-slide {
+                isolation: isolate;
+              }
               .articles-coverflow-swiper .swiper-slide-active {
                 opacity: 1 !important;
                 filter: none !important;
+                z-index: 10 !important;
+              }
+              .articles-coverflow-swiper .swiper-slide-prev,
+              .articles-coverflow-swiper .swiper-slide-next {
+                z-index: 5 !important;
+              }
+              .articles-coverflow-swiper .swiper-slide:not(.swiper-slide-active):not(.swiper-slide-prev):not(.swiper-slide-next) {
+                z-index: 1 !important;
               }
             `}</style>
 
@@ -259,7 +242,7 @@ export default function ArticlesSection() {
                 coverflowEffect={{
                   rotate: 0,
                   stretch: 0,
-                  depth: 120,
+                  depth: 350,       // увеличено: дальние слайды уходят глубже
                   modifier: 2,
                   slideShadows: false,
                 }}
@@ -332,7 +315,6 @@ export default function ArticlesSection() {
         </div>
       </section>
 
-      {/* Article modal */}
       <AnimatePresence>
         {activeArticle && (
           <ArticleModal article={activeArticle} onClose={() => setActiveArticle(null)} />

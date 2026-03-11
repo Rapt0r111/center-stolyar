@@ -95,13 +95,24 @@ body {
 /*
  * ВАЖНО: Не трогаем transform — им полностью управляет EffectCoverflow.
  * Накладываем только opacity + brightness/saturate на неактивные слайды.
- * Компонентные стили могут переопределить эти значения через специфичный класс.
+ * z-index управляет порядком наложения: активный слайд всегда поверх соседей.
  */
 .swiper-slide {
   transition: opacity 0.5s ease, filter 0.5s ease;
   will-change: opacity, filter;
+  position: relative;
+  z-index: 0;
 }
 .swiper-slide:not(.swiper-slide-active) {
   opacity: 0.38;
   filter: brightness(0.52) saturate(0.65);
+}
+/* Активный слайд — максимальный z-index, всегда поверх */
+.swiper-slide-active {
+  z-index: 2;
+}
+/* Соседние слайды — выше остальных, но ниже активного */
+.swiper-slide-prev,
+.swiper-slide-next {
+  z-index: 1;
 }
