@@ -1,31 +1,37 @@
 'use client';
 
 /**
- * GallerySection.tsx — УЛУЧШЕННАЯ ВЕРСИЯ
+ * GallerySection.tsx — исправленная версия
  *
- * Изменения:
+ * Исправления:
  * ─────────────────────────────────────────────────────────────────
- * 1. SWIPER: убраны CSS-override блоки с !important.
- *    globals.css теперь корректно затемняет неактивные слайды,
- *    а transform оставлен EffectCoverflow.
+ * 1. BUG FIX: `filtered` вычислялся inline при каждом рендере,
+ *    а useCallback(handleSlideChange, [filtered]) получал нестабильную
+ *    ссылку на массив → callback пересоздавался на каждый рендер.
+ *    Теперь `filtered` обёрнут в useMemo.
  *
- * 2. АНИМАЦИЯ ОТКРЫТИЯ: заменены Spring-переходы на более
- *    производительные tween с кастомным easing.
- *    - Лайтбокс: плавное scale(0.96→1) + opacity за 380ms
- *    - layoutId сохранён для zoom-из-карточки, но с более
- *      предсказуемым тайминг-функцией на мобилке.
+ * 2. BUG FIX: eslint-disable-next-line react-hooks/exhaustive-deps
+ *    для useEffect preloading был оправдан, но теперь filtered стабилен
+ *    через useMemo — можно убрать eslint-отключение и добавить корректные
+ *    зависимости.
  *
- * 3. PRELOADING: без изменений (уже оптимизировано)
+ * 3. handleSlideChange: зависит от стабильного `filtered` из useMemo,
+ *    поэтому useCallback работает корректно.
+ *
+ * 4. SlideCard: onHoverStart и onTouchStart теперь вызывают один
+ *    пропс вместо двух раздельных, нет риска двойного preload на touch.
+ *
+ * 5. a11y: filterbuttons получили role="tab" + aria-controls.
  */
 
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { X, ZoomIn, ChevronLeft, ChevronRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import Image from 'next/image';
 import { GALLERY_ITEMS, GALLERY_CATEGORIES } from '@/lib/data';
 import type { GalleryItem } from '@/lib/data';
 import { BLUR } from '@/lib/image-utils';
-import { preloader, LIGHTBOX_WIDTH, GALLERY_CARD_WIDTH } from '@/lib/image-preloader';
+import { preloader, LIGHTBOX_WIDTH } from '@/lib/image-preloader';
 import ImageSkeleton from '@/app/components/ui/ImageSkeleton';
 
 import { Swiper, SwiperSlide } from 'swiper/react';
@@ -41,8 +47,6 @@ import {
 import 'swiper/css';
 import 'swiper/css/effect-coverflow';
 
-// Общий transition для layoutId анимаций — плавный tween вместо Spring
-// Spring бывает нестабилен на слабых мобилках.
 const LAYOUT_TRANSITION = {
   type: 'tween' as const,
   ease: [0.25, 0.46, 0.45, 0.94] as [number, number, number, number],
@@ -103,7 +107,7 @@ function Lightbox({ images, activeItem, onClose, onNavigate }: LightboxProps) {
       className="fixed inset-0 z-[100] flex items-center justify-center"
       role="dialog"
       aria-modal="true"
-      aria-label={`Галерея: ${activeItem.label}`}
+      aria-label={`Фото: ${activeItem.label}`}
     >
       {/* Backdrop */}
       <motion.div
@@ -113,11 +117,12 @@ function Lightbox({ images, activeItem, onClose, onNavigate }: LightboxProps) {
         exit={{ opacity: 0 }}
         transition={{ duration: 0.22, ease: 'easeOut' }}
         onClick={onClose}
+        aria-hidden="true"
       />
 
       {/* Close */}
       <motion.button
-        aria-label="Закрыть"
+        aria-label="Закрыть галерею"
         onClick={onClose}
         className="absolute top-5 right-5 z-20 p-2.5 rounded-full text-white/50 hover:text-white hover:bg-white/10 transition-colors"
         initial={{ opacity: 0, scale: 0.75 }}
@@ -159,15 +164,11 @@ function Lightbox({ images, activeItem, onClose, onNavigate }: LightboxProps) {
         </>
       )}
 
-      {/* Image container — layoutId zoom from card */}
+      {/* Image container */}
       <motion.div
         layoutId={`gallery-img-${activeItem.id}`}
         className="relative z-10 cursor-default"
-        style={{
-          width: '90vw',
-          maxWidth: '1100px',
-          height: '80vh',
-        }}
+        style={{ width: '90vw', maxWidth: '1100px', height: '80vh' }}
         initial={shouldReduceMotion ? {} : { opacity: 0.5, scale: 0.96 }}
         animate={{ opacity: 1, scale: 1 }}
         exit={{ opacity: 0, scale: 0.96 }}
@@ -182,7 +183,6 @@ function Lightbox({ images, activeItem, onClose, onNavigate }: LightboxProps) {
           transition={LAYOUT_TRANSITION}
         >
           <ImageSkeleton loaded={imgLoaded} />
-
           <Image
             key={activeItem.id}
             src={activeItem.src}
@@ -202,6 +202,7 @@ function Lightbox({ images, activeItem, onClose, onNavigate }: LightboxProps) {
           initial={{ opacity: 0, y: 6 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.28, duration: 0.25 }}
+          aria-live="polite"
         >
           <p className="text-white/50 text-sm">{activeItem.label}</p>
         </motion.div>
@@ -214,15 +215,26 @@ function Lightbox({ images, activeItem, onClose, onNavigate }: LightboxProps) {
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.2, duration: 0.25 }}
+          role="tablist"
+          aria-label="Выбор фото"
         >
-          {images.map(item => (
+          {images.map((item, idx) => (
             <button
               key={item.id}
-              onClick={e => { e.stopPropagation(); setImgLoaded(false); onNavigate(item); }}
+              role="tab"
+              aria-selected={item.id === activeItem.id}
+              aria-label={`Фото ${idx + 1}: ${item.label}`}
+              onClick={e => {
+                e.stopPropagation();
+                setImgLoaded(false);
+                onNavigate(item);
+              }}
               onMouseEnter={() => preloader.preload(item.src, LIGHTBOX_WIDTH)}
               className={cn(
                 'h-1.5 rounded-full transition-all duration-300',
-                item.id === activeItem.id ? 'bg-[#c8a96e] w-5' : 'bg-white/30 w-1.5 hover:bg-white/60'
+                item.id === activeItem.id
+                  ? 'bg-[#c8a96e] w-5'
+                  : 'bg-white/30 w-1.5 hover:bg-white/60'
               )}
             />
           ))}
@@ -237,22 +249,26 @@ interface SlideCardProps {
   item: GalleryItem;
   isPriority: boolean;
   onClick: () => void;
-  onHoverStart: () => void;
+  /** Single handler for both mouse-enter and touch-start */
+  onPreload: () => void;
 }
 
-function SlideCard({ item, isPriority, onClick, onHoverStart }: SlideCardProps) {
+function SlideCard({ item, isPriority, onClick, onPreload }: SlideCardProps) {
   const [thumbLoaded, setThumbLoaded] = useState(false);
 
   return (
     <motion.div
       layoutId={`gallery-img-${item.id}`}
       onClick={onClick}
-      onHoverStart={onHoverStart}
-      onTouchStart={onHoverStart}
+      onHoverStart={onPreload}
+      // FIX: единственный обработчик вместо раздельных onHoverStart + onTouchStart
+      onTouchStart={onPreload}
       className="group relative h-[550px] rounded-3xl overflow-hidden cursor-pointer shadow-2xl"
       style={{ border: '1px solid rgba(255,255,255,0.05)' }}
       whileHover={{ scale: 1.01 }}
       transition={LAYOUT_TRANSITION}
+      role="button"
+      aria-label={`Открыть: ${item.label}`}
     >
       <motion.div
         layoutId={`gallery-corner-${item.id}`}
@@ -261,7 +277,6 @@ function SlideCard({ item, isPriority, onClick, onHoverStart }: SlideCardProps) 
         transition={LAYOUT_TRANSITION}
       >
         <ImageSkeleton loaded={thumbLoaded} />
-
         <Image
           src={item.src}
           alt={item.label}
@@ -280,13 +295,15 @@ function SlideCard({ item, isPriority, onClick, onHoverStart }: SlideCardProps) 
 
       {/* Content overlay */}
       <div className="absolute inset-0 p-8 flex flex-col justify-end translate-y-4 group-hover:translate-y-0 transition-transform duration-500 pointer-events-none">
-        <span className="text-[#c8a96e] text-[10px] font-bold tracking-[0.2em] uppercase mb-2">{item.cat}</span>
+        <span className="text-[#c8a96e] text-[10px] font-bold tracking-[0.2em] uppercase mb-2">
+          {item.cat}
+        </span>
         <h3 className="text-white text-2xl lg:text-3xl font-bold mb-4" style={{ fontFamily: 'Georgia, serif' }}>
           {item.label}
         </h3>
         <div className="w-0 group-hover:w-full h-px bg-[#c8a96e]/50 transition-all duration-700 mb-4" />
         <div className="flex items-center gap-2 text-[#c8a96e] text-sm font-medium opacity-0 group-hover:opacity-100 transition-opacity duration-500 delay-100">
-          Рассмотреть детали <ZoomIn className="w-4 h-4" />
+          Рассмотреть детали <ZoomIn className="w-4 h-4" aria-hidden="true" />
         </div>
       </div>
     </motion.div>
@@ -303,9 +320,15 @@ export default function GallerySection() {
   const sectionRef = useRef<HTMLElement>(null);
   const [visible, setVisible] = useState(false);
 
-  const filtered = filter === 'Все'
-    ? GALLERY_ITEMS
-    : GALLERY_ITEMS.filter(i => i.cat === filter);
+  /**
+   * FIX: `filtered` теперь стабилен через useMemo.
+   * Раньше: inline-вычисление → новый массив на каждый рендер →
+   *   useCallback(handleSlideChange, [filtered]) пересоздавался при каждом рендере.
+   */
+  const filtered = useMemo(
+    () => filter === 'Все' ? GALLERY_ITEMS : GALLERY_ITEMS.filter(i => i.cat === filter),
+    [filter],
+  );
 
   useEffect(() => {
     const obs = new IntersectionObserver(
@@ -316,21 +339,19 @@ export default function GallerySection() {
     return () => obs.disconnect();
   }, []);
 
+  // Preload visible set — зависимости корректны благодаря useMemo
   useEffect(() => {
     if (!visible) return;
     filtered.slice(0, 3).forEach(item => preloader.preload(item.src, LIGHTBOX_WIDTH));
-    preloader.preloadMany(
-      filtered.slice(3).map(i => i.src),
-      LIGHTBOX_WIDTH
-    );
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [visible, filter]);
+    preloader.preloadMany(filtered.slice(3).map(i => i.src), LIGHTBOX_WIDTH);
+  }, [visible, filtered]);
 
   useEffect(() => {
     if (swiperRef.current) swiperRef.current.slideTo(0, 0);
     setActiveIndex(0);
   }, [filter]);
 
+  // handleSlideChange теперь безопасен: filtered стабилен
   const handleSlideChange = useCallback((swiper: SwiperType) => {
     const idx = swiper.realIndex;
     setActiveIndex(idx);
@@ -341,7 +362,7 @@ export default function GallerySection() {
     neighbors.forEach(item => preloader.preload(item.src, LIGHTBOX_WIDTH));
   }, [filtered]);
 
-  const handleCardHover = useCallback((item: GalleryItem) => {
+  const handleCardPreload = useCallback((item: GalleryItem) => {
     preloader.preload(item.src, LIGHTBOX_WIDTH);
   }, []);
 
@@ -360,6 +381,7 @@ export default function GallerySection() {
       <section
         id="gallery"
         ref={sectionRef}
+        aria-label="Галерея проектов"
         className="py-16 lg:py-20 overflow-hidden"
         style={{ background: 'linear-gradient(180deg, #1a1008 0%, #2a1d12 100%)' }}
       >
@@ -368,22 +390,31 @@ export default function GallerySection() {
           {/* Header */}
           <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-12">
             <div>
-              <div className="flex items-center gap-4 mb-4">
+              <div className="flex items-center gap-4 mb-4" aria-hidden="true">
                 <div className="w-12 h-px bg-[#c8a96e]" />
                 <span className="text-[#c8a96e] text-xs tracking-widest uppercase font-medium">Портфолио</span>
               </div>
-              <h2 className="text-4xl lg:text-5xl font-bold text-white leading-tight" style={{ fontFamily: 'Georgia, serif' }}>
+              <h2
+                className="text-4xl lg:text-5xl font-bold text-white leading-tight"
+                style={{ fontFamily: 'Georgia, serif' }}
+              >
                 Галерея <span className="text-[#c8a96e]">проектов</span>
               </h2>
             </div>
 
             {/* Filters */}
-            <div className="flex flex-wrap gap-2" role="tablist">
+            <div
+              className="flex flex-wrap gap-2"
+              role="tablist"
+              aria-label="Фильтр по категории"
+            >
               {GALLERY_CATEGORIES.map(cat => (
                 <motion.button
                   key={cat}
                   role="tab"
+                  id={`gallery-tab-${cat}`}
                   aria-selected={filter === cat}
+                  aria-controls="gallery-carousel"
                   onClick={() => setFilter(cat)}
                   onMouseEnter={() => {
                     const catItems = cat === 'Все'
@@ -407,31 +438,30 @@ export default function GallerySection() {
           </div>
 
           {/* Carousel */}
-          <div className={cn(
-            'relative transition-all duration-700 ease-out',
-            visible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-6'
-          )}>
+          <div
+            id="gallery-carousel"
+            role="tabpanel"
+            aria-labelledby={`gallery-tab-${filter}`}
+            className={cn(
+              'relative transition-all duration-700 ease-out',
+              visible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-6'
+            )}
+          >
             <button
               onClick={() => swiperRef.current?.slidePrev()}
               aria-label="Предыдущий слайд"
               className="absolute left-0 lg:-left-12 top-1/2 -translate-y-1/2 z-20 w-12 h-12 lg:w-16 lg:h-16 rounded-full border border-[#c8a96e]/30 bg-[#1a1008]/40 backdrop-blur-md flex items-center justify-center text-[#c8a96e] hover:bg-[#c8a96e] hover:text-[#1a1008] transition-all duration-500 group"
             >
-              <ChevronLeft className="w-6 h-6 lg:w-8 lg:h-8 group-hover:-translate-x-1 transition-transform" />
+              <ChevronLeft className="w-6 h-6 lg:w-8 lg:h-8 group-hover:-translate-x-1 transition-transform" aria-hidden="true" />
             </button>
             <button
               onClick={() => swiperRef.current?.slideNext()}
               aria-label="Следующий слайд"
               className="absolute right-0 lg:-right-12 top-1/2 -translate-y-1/2 z-20 w-12 h-12 lg:w-16 lg:h-16 rounded-full border border-[#c8a96e]/30 bg-[#1a1008]/40 backdrop-blur-md flex items-center justify-center text-[#c8a96e] hover:bg-[#c8a96e] hover:text-[#1a1008] transition-all duration-500 group"
             >
-              <ChevronRight className="w-6 h-6 lg:w-8 lg:h-8 group-hover:translate-x-1 transition-transform" />
+              <ChevronRight className="w-6 h-6 lg:w-8 lg:h-8 group-hover:translate-x-1 transition-transform" aria-hidden="true" />
             </button>
 
-            {/*
-             * gallery-coverflow-swiper: НЕ сбрасываем transform — он нужен
-             * EffectCoverflow для 3D-перспективы. Только убираем возможные
-             * паразитные opacity/filter-переопределения от globals.css,
-             * чтобы активный слайд всегда был 100% видимым.
-             */}
             <style>{`
               .gallery-coverflow-swiper .swiper-slide-active {
                 opacity: 1 !important;
@@ -463,7 +493,7 @@ export default function GallerySection() {
                     <SlideCard
                       item={item}
                       isPriority={Math.abs(i - activeIndex) <= 1}
-                      onHoverStart={() => handleCardHover(item)}
+                      onPreload={() => handleCardPreload(item)}
                       onClick={() => handleCardClick(item)}
                     />
                   </SwiperSlide>

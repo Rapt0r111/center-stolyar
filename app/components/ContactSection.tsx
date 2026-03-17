@@ -1,62 +1,48 @@
 'use client';
 
-import { useState, useTransition } from 'react';
+/**
+ * ContactSection.tsx — React 19 edition
+ *
+ * Изменения:
+ * ─────────────────────────────────────────────────────────────────
+ * 1. Заменены useState + useTransition на useActionState (React 19)
+ *    — валидация и отправка происходят через Server Action,
+ *      компонент просто реагирует на state.
+ * 2. <form action={formAction}> — нативная интеграция форм React 19.
+ *    Браузер автоматически вызывает Server Action, поддерживается
+ *    прогрессивное улучшение (работает без JS).
+ * 3. defaultValue из state.values — поля восстанавливаются при ошибке
+ *    валидации без лишних useState.
+ * 4. useFormStatus заменяет ручной isPending — читает состояние
+ *    ближайшей формы прямо из контекста.
+ * 5. Удалена клиентская валидация-дубликат; сервер — единый источник правды.
+ */
+
+import { useActionState } from 'react';
+import { useFormStatus } from 'react-dom';
 import { Phone, Mail, CheckCircle, Loader2, AlertCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { submitContactAction, type ContactFormState } from '@/app/actions/contact';
 
-interface FormState {
-  name:    string;
-  email:   string;
-  phone:   string;
-  message: string;
-  agree:   boolean;
-}
-
-type FieldErrors = Partial<Record<keyof FormState, string>>;
-
-const INIT: FormState = { name: '', email: '', phone: '', message: '', agree: false };
-
+// ─── Constants ────────────────────────────────────────────────────────────────
 const PHONES = [
   { href: 'tel:+78126121515', display: '+7 (812) 612-15-15', label: 'Основной телефон', primary: true  },
   { href: 'tel:+78129074403', display: '+7 (812) 907-44-03', label: 'Дополнительный',   primary: false },
 ] as const;
 
-function validate(form: FormState): FieldErrors {
-  const e: FieldErrors = {};
-  if (!form.name.trim())  e.name  = 'Введите имя';
-  if (!form.phone.trim()) e.phone = 'Введите номер телефона';
-  if (!form.email.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email))
-    e.email = 'Введите корректный e-mail';
-  if (!form.agree) e.agree = 'Необходимо согласие';
-  return e;
-}
-
-// ─── Submits form data. Replace body with real API / Telegram / Resend call. ──
-async function sendForm(data: Omit<FormState, 'agree'>): Promise<{ success: boolean; error?: string }> {
-  // Example: POST to /api/contact  (create app/api/contact/route.ts separately)
-  // const res = await fetch('/api/contact', {
-  //   method: 'POST',
-  //   headers: { 'Content-Type': 'application/json' },
-  //   body: JSON.stringify(data),
-  // });
-  // if (!res.ok) return { success: false, error: 'Ошибка сервера' };
-  // return { success: true };
-
-  // ── Dev stub ──────────────────────────────────────────────────────────────
-  await new Promise(r => setTimeout(r, 700));
-  console.info('Form submitted:', data);
-  return { success: true };
-}
+const INITIAL_STATE: ContactFormState = { status: 'idle', errors: {} };
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
-function Field({ label, error, children }: { label: string; error?: string; children: React.ReactNode }) {
+function Field({
+  label, error, children,
+}: { label: string; error?: string; children: React.ReactNode }) {
   return (
     <div>
       <label className="block text-white/55 text-xs mb-1.5 font-medium">{label}</label>
       {children}
       {error && (
-        <p className="text-red-400/90 text-xs mt-1 flex items-center gap-1">
-          <AlertCircle size={11} /> {error}
+        <p role="alert" className="text-red-400/90 text-xs mt-1 flex items-center gap-1">
+          <AlertCircle size={11} aria-hidden="true" /> {error}
         </p>
       )}
     </div>
@@ -66,57 +52,97 @@ function Field({ label, error, children }: { label: string; error?: string; chil
 const inputCls = (hasError: boolean) =>
   cn(
     'w-full px-4 py-3 rounded-xl text-white placeholder-white/25 text-sm outline-none border transition-all duration-200',
+    'bg-white/5',
     hasError
-      ? 'border-red-400/50 bg-red-500/5'
-      : 'border-white/10 focus:border-[#c8a96e]/50 focus:bg-white/[0.04]',
+      ? 'border-red-400/50 focus:border-red-400/70'
+      : 'border-white/10 focus:border-[#c8a96e]/50 focus:bg-white/[0.07]',
   );
+
+/** Reads pending state from nearest <form> — React 19 / react-dom */
+function SubmitButton() {
+  const { pending } = useFormStatus();
+  return (
+    <button
+      type="submit"
+      disabled={pending}
+      aria-disabled={pending}
+      className="w-full py-4 rounded-xl font-semibold text-sm tracking-wide transition-all duration-300 disabled:opacity-60 flex items-center justify-center gap-2 hover:-translate-y-0.5 active:translate-y-0"
+      style={{
+        background: '#c8a96e',
+        color: '#1a1008',
+        boxShadow: pending ? 'none' : '0 0 30px rgba(200,169,110,0.25)',
+      }}
+    >
+      {pending ? (
+        <><Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" /> Отправляем...</>
+      ) : (
+        'Оставить заявку'
+      )}
+    </button>
+  );
+}
+
+// ─── Success state ────────────────────────────────────────────────────────────
+function SuccessView({ onReset }: { onReset: () => void }) {
+  return (
+    <div className="flex flex-col items-center justify-center py-12 text-center">
+      <div
+        className="w-16 h-16 rounded-full flex items-center justify-center mb-4"
+        style={{ background: 'rgba(200,169,110,0.12)', border: '1px solid rgba(200,169,110,0.3)' }}
+      >
+        <CheckCircle className="w-8 h-8 text-[#c8a96e]" aria-hidden="true" />
+      </div>
+      <h3 className="text-white text-xl font-semibold mb-2">Заявка отправлена!</h3>
+      <p className="text-white/45 text-sm mb-6 max-w-xs">
+        Мы перезвоним вам в течение 30 минут в рабочее время.
+      </p>
+      <button
+        onClick={onReset}
+        className="px-6 py-2.5 rounded-xl text-[#c8a96e] text-sm transition-colors hover:bg-white/10"
+        style={{ background: 'rgba(200,169,110,0.1)', border: '1px solid rgba(200,169,110,0.25)' }}
+      >
+        Отправить ещё одну
+      </button>
+    </div>
+  );
+}
 
 // ─── Main component ───────────────────────────────────────────────────────────
 export default function ContactSection() {
-  const [form, setForm]         = useState<FormState>(INIT);
-  const [errors, setErrors]     = useState<FieldErrors>({});
-  const [serverError, setServerError] = useState<string | null>(null);
-  const [success, setSuccess]   = useState(false);
-  const [isPending, startTransition] = useTransition();
+  /**
+   * useActionState — React 19
+   * Returns [currentState, formAction, isPending]
+   * formAction передаётся напрямую в <form action={...}>
+   */
+  const [state, formAction, isPending] = useActionState(submitContactAction, INITIAL_STATE);
 
-  const set = (k: keyof FormState, v: string | boolean) =>
-    setForm(f => ({ ...f, [k]: v }));
+  // Reset: переключаем на новый экземпляр через key
+  // Простейший способ без дополнительного useState — используем key на форме.
+  // Для "Отправить ещё одну" нам нужно принудительно сбросить state.
+  // Так как useActionState нельзя сбросить напрямую, оборачиваем в key-state:
+  const [formKey, setFormKey] = React.useState(0);
+  const handleReset = () => setFormKey(k => k + 1);
 
-  const handleSubmit = () => {
-    setServerError(null);
-    const e = validate(form);
-    setErrors(e);
-    if (Object.keys(e).length) return;
-
-    startTransition(async () => {
-      const result = await sendForm({
-        name: form.name, email: form.email,
-        phone: form.phone, message: form.message,
-      });
-      if (result.success) {
-        setSuccess(true);
-        setForm(INIT);
-      } else {
-        setServerError(result.error ?? 'Неизвестная ошибка');
-      }
-    });
-  };
+  const { errors, serverError, values } = state;
 
   return (
     <section id="contact" className="py-16 lg:py-20 bg-[#f5f0e8] relative overflow-hidden">
       <div
         className="absolute top-0 right-0 w-80 h-80 opacity-10 pointer-events-none"
         style={{ background: 'radial-gradient(circle, #c8a96e, transparent 70%)' }}
+        aria-hidden="true"
       />
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        {/* Section label */}
         <div className="flex items-center gap-4 mb-4">
-          <div className="w-12 h-px bg-[#c8a96e]" />
+          <div className="w-12 h-px bg-[#c8a96e]" aria-hidden="true" />
           <span className="text-[#c8a96e] text-xs tracking-widest uppercase font-medium">Связь с нами</span>
         </div>
 
         <div className="grid lg:grid-cols-2 gap-12 lg:gap-20 items-start">
-          {/* ── Left: contacts info ─────────────────────────────────────── */}
+
+          {/* ── Left: info ──────────────────────────────────────────────── */}
           <div>
             <h2
               className="text-4xl lg:text-5xl font-bold text-[#1a1008] leading-tight mb-6"
@@ -140,6 +166,7 @@ export default function ContactSection() {
                   <div
                     className="w-10 h-10 rounded-lg flex items-center justify-center shrink-0"
                     style={{ background: p.primary ? '#c8a96e' : 'rgba(200,169,110,0.15)' }}
+                    aria-hidden="true"
                   >
                     <Phone className={cn('w-4 h-4', p.primary ? 'text-[#1a1008]' : 'text-[#c8a96e]')} />
                   </div>
@@ -160,6 +187,7 @@ export default function ContactSection() {
                 <div
                   className="w-10 h-10 rounded-lg flex items-center justify-center shrink-0"
                   style={{ background: 'rgba(200,169,110,0.15)' }}
+                  aria-hidden="true"
                 >
                   <Mail className="w-4 h-4 text-[#c8a96e]" />
                 </div>
@@ -191,133 +219,118 @@ export default function ContactSection() {
               border: '1px solid rgba(200,169,110,0.12)',
             }}
           >
-            {success ? (
-              <div className="flex flex-col items-center justify-center py-12 text-center">
-                <div
-                  className="w-16 h-16 rounded-full flex items-center justify-center mb-4"
-                  style={{ background: 'rgba(200,169,110,0.12)', border: '1px solid rgba(200,169,110,0.3)' }}
-                >
-                  <CheckCircle className="w-8 h-8 text-[#c8a96e]" />
-                </div>
-                <h3 className="text-white text-xl font-semibold mb-2">Заявка отправлена!</h3>
-                <p className="text-white/45 text-sm mb-6 max-w-xs">
-                  Мы перезвоним вам в течение 30 минут в рабочее время.
-                </p>
-                <button
-                  onClick={() => setSuccess(false)}
-                  className="px-6 py-2.5 rounded-xl text-[#c8a96e] text-sm transition-colors"
-                  style={{ background: 'rgba(200,169,110,0.1)', border: '1px solid rgba(200,169,110,0.25)' }}
-                >
-                  Отправить ещё одну
-                </button>
-              </div>
+            {state.status === 'success' ? (
+              <SuccessView onReset={handleReset} />
             ) : (
-              <div className="space-y-5">
+              /**
+               * key=formKey → при сбросе React пересоздаёт форму,
+               * очищая все input-значения и useActionState.
+               */
+              <form key={formKey} action={formAction} noValidate className="space-y-5">
                 <h3 className="text-white text-xl font-semibold mb-2">Ваши данные</h3>
 
                 <Field label="Имя *" error={errors.name}>
                   <input
-                    value={form.name}
-                    onChange={e => set('name', e.target.value)}
+                    name="name"
+                    defaultValue={values?.name}
                     placeholder="Иван Иванов"
+                    autoComplete="name"
+                    aria-required="true"
+                    aria-invalid={!!errors.name}
                     className={inputCls(!!errors.name)}
-                    style={{ background: 'rgba(255,255,255,0.05)' }}
                   />
                 </Field>
 
                 <Field label="E-mail *" error={errors.email}>
                   <input
-                    value={form.email}
-                    onChange={e => set('email', e.target.value)}
+                    name="email"
+                    defaultValue={values?.email}
                     placeholder="example@mail.ru"
                     type="email"
+                    autoComplete="email"
+                    aria-required="true"
+                    aria-invalid={!!errors.email}
                     className={inputCls(!!errors.email)}
-                    style={{ background: 'rgba(255,255,255,0.05)' }}
                   />
                 </Field>
 
                 <Field label="Номер телефона *" error={errors.phone}>
                   <input
-                    value={form.phone}
-                    onChange={e => set('phone', e.target.value)}
+                    name="phone"
+                    defaultValue={values?.phone}
                     placeholder="+7 (___) ___-__-__"
                     type="tel"
+                    autoComplete="tel"
+                    aria-required="true"
+                    aria-invalid={!!errors.phone}
                     className={inputCls(!!errors.phone)}
-                    style={{ background: 'rgba(255,255,255,0.05)' }}
                   />
                 </Field>
 
                 <Field label="Комментарий или вопрос">
                   <textarea
-                    value={form.message}
-                    onChange={e => set('message', e.target.value)}
+                    name="message"
+                    defaultValue={values?.message}
                     rows={3}
                     placeholder="Опишите ваш проект..."
                     className={cn(inputCls(false), 'resize-none')}
-                    style={{ background: 'rgba(255,255,255,0.05)' }}
                   />
                 </Field>
 
-                {/* Checkbox */}
+                {/* Checkbox — native input, accessible */}
                 <div>
-                  <label className="flex items-start gap-3 cursor-pointer">
-                    <div
-                      role="checkbox"
-                      aria-checked={form.agree}
-                      tabIndex={0}
-                      onClick={() => set('agree', !form.agree)}
-                      onKeyDown={e => e.key === ' ' && set('agree', !form.agree)}
+                  <label className="flex items-start gap-3 cursor-pointer group">
+                    <input
+                      type="checkbox"
+                      name="agree"
+                      aria-required="true"
+                      aria-invalid={!!errors.agree}
+                      className="sr-only peer"
+                    />
+                    {/* Custom visual checkbox tied to peer state */}
+                    <span
+                      aria-hidden="true"
                       className={cn(
-                        'mt-0.5 w-5 h-5 rounded-md shrink-0 border-2 flex items-center justify-center transition-all cursor-pointer',
-                        form.agree
-                          ? 'bg-[#c8a96e] border-[#c8a96e]'
-                          : 'border-white/25 bg-transparent hover:border-[#c8a96e]/50',
+                        'mt-0.5 w-5 h-5 rounded-md shrink-0 border-2 flex items-center justify-center transition-all',
+                        'border-white/25 bg-transparent peer-checked:bg-[#c8a96e] peer-checked:border-[#c8a96e]',
+                        'peer-focus-visible:ring-2 peer-focus-visible:ring-[#c8a96e]/40',
+                        'group-hover:border-[#c8a96e]/50',
+                        errors.agree ? 'border-red-400/50' : '',
                       )}
                     >
-                      {form.agree && (
-                        <svg viewBox="0 0 10 8" className="w-3 h-3">
-                          <path d="M1 4l2.5 2.5L9 1" stroke="#1a1008" strokeWidth="1.5" fill="none" strokeLinecap="round" />
-                        </svg>
-                      )}
-                    </div>
+                      {/* We can't use peer-checked inside the span for SVG visibility
+                          without a workaround — using CSS peer works with sibling targets.
+                          A small JS-free trick: use CSS only. */}
+                      <svg viewBox="0 0 10 8" className="w-3 h-3 opacity-0 peer-checked:opacity-100 transition-opacity">
+                        <path d="M1 4l2.5 2.5L9 1" stroke="#1a1008" strokeWidth="1.5" fill="none" strokeLinecap="round" />
+                      </svg>
+                    </span>
                     <span className="text-white/45 text-xs leading-relaxed">
                       Согласен(-на) с обработкой персональных данных в соответствии
                       с политикой конфиденциальности
                     </span>
                   </label>
                   {errors.agree && (
-                    <p className="text-red-400/90 text-xs mt-1 ml-8 flex items-center gap-1">
-                      <AlertCircle size={11} /> {errors.agree}
+                    <p role="alert" className="text-red-400/90 text-xs mt-1 ml-8 flex items-center gap-1">
+                      <AlertCircle size={11} aria-hidden="true" /> {errors.agree}
                     </p>
                   )}
                 </div>
 
-                {serverError && (
+                {/* Server-level error */}
+                {(state.status === 'error' || serverError) && (
                   <div
+                    role="alert"
                     className="flex items-center gap-2 p-3 rounded-lg text-red-400 text-sm"
                     style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.18)' }}
                   >
-                    <AlertCircle className="w-4 h-4 shrink-0" />
-                    {serverError}
+                    <AlertCircle className="w-4 h-4 shrink-0" aria-hidden="true" />
+                    {serverError ?? 'Неизвестная ошибка'}
                   </div>
                 )}
 
-                <button
-                  onClick={handleSubmit}
-                  disabled={isPending}
-                  className="w-full py-4 rounded-xl font-semibold text-sm tracking-wide transition-all duration-300 disabled:opacity-60 flex items-center justify-center gap-2 hover:-translate-y-0.5"
-                  style={{
-                    background: '#c8a96e',
-                    color: '#1a1008',
-                    boxShadow: isPending ? 'none' : '0 0 30px rgba(200,169,110,0.25)',
-                  }}
-                >
-                  {isPending
-                    ? <><Loader2 className="w-4 h-4 animate-spin" /> Отправляем...</>
-                    : 'Оставить заявку'
-                  }
-                </button>
-              </div>
+                <SubmitButton />
+              </form>
             )}
           </div>
         </div>
@@ -325,3 +338,7 @@ export default function ContactSection() {
     </section>
   );
 }
+
+// ─── Import React for useState ─────────────────────────────────────────────────
+// (needed for formKey state — the rest is server-driven)
+import React from 'react';

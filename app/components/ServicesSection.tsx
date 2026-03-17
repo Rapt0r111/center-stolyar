@@ -1,18 +1,29 @@
 'use client';
 
 /**
- * ServicesSection.tsx — ОПТИМИЗИРОВАННАЯ ВЕРСИЯ
+ * ServicesSection.tsx — исправленная версия
  *
- * Изменения vs оригинал:
- * ───────────────────────────────────────────────────────────────
- * 1. ServiceModal: обложка использует ImageSkeleton вместо blur
- * 2. Фотополоса в модалке: миниатюры используют Skeleton
- * 3. При открытии модалки сразу preload всех фото галереи этой категории
- * 4. PhotoLightbox: активное фото с priority + Skeleton
- * 5. Хук useImageLoad вынесен из ImageSkeleton для чистоты использования
+ * Исправления:
+ * ─────────────────────────────────────────────────────────────────
+ * 1. BUG FIX: Scroll lock переписан.
+ *    Старый код:
+ *      document.body.style.overflow = 'hidden' + window.scrollTo(0, scrollY) в cleanup
+ *    Проблема: window.scrollTo вызывался при КАЖДОМ закрытии модалки, в т.ч.
+ *    на десктопе, где скачка нет, что создавало неожиданные прокрутки.
+ *    Новый код: используем document.documentElement (как в Navbar) и
+ *    принудительную прокрутку только если позиция изменилась.
+ *
+ * 2. BUG FIX: Конфликт scroll lock с Navbar.
+ *    Navbar блокирует document.documentElement.style.overflow,
+ *    ServicesSection — document.body.style.overflow.
+ *    Теперь оба компонента используют documentElement → не конфликтуют.
+ *
+ * 3. handleCta: после закрытия модалки нужно 1 тик, чтобы unlock scroll
+ *    отработал до scrollTo. Таймаут увеличен с 300мс до 380мс (= длительность
+ *    exit анимации модалки).
  */
 
-import React, { useEffect, useCallback, useState } from 'react';
+import React, { useEffect, useCallback, useState, useRef } from 'react';
 import { cn } from '@/lib/utils';
 import { SERVICES, GALLERY_ITEMS } from '@/lib/data';
 import type { Service, GalleryItem } from '@/lib/data';
@@ -61,6 +72,21 @@ const CELL_CLASSES: Record<number, string> = {
   6: 'col-span-2 row-span-1',
 };
 
+// ─── Unified scroll lock (same approach as Navbar) ────────────────────────────
+function lockScroll(): number {
+  const y = window.scrollY;
+  document.documentElement.style.overflow = 'hidden';
+  return y;
+}
+
+function unlockScroll(savedY: number) {
+  document.documentElement.style.overflow = '';
+  // Только если позиция изменилась (защита от лишнего прокрутки)
+  if (Math.abs(window.scrollY - savedY) > 1) {
+    window.scrollTo({ top: savedY, behavior: 'instant' });
+  }
+}
+
 // ─── Photo Lightbox ───────────────────────────────────────────────────────────
 function PhotoLightbox({
   images,
@@ -74,14 +100,13 @@ function PhotoLightbox({
   const [idx, setIdx] = useState(initialIndex);
   const [imgLoaded, setImgLoaded] = useState(false);
 
-  // Сброс состояния загрузки при смене фото
   useEffect(() => { setImgLoaded(false); }, [idx]);
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose();
-      if (e.key === 'ArrowRight') { setIdx(i => (i + 1) % images.length); }
-      if (e.key === 'ArrowLeft')  { setIdx(i => (i - 1 + images.length) % images.length); }
+      if (e.key === 'ArrowRight') setIdx(i => (i + 1) % images.length);
+      if (e.key === 'ArrowLeft')  setIdx(i => (i - 1 + images.length) % images.length);
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
@@ -94,9 +119,12 @@ function PhotoLightbox({
       exit={{ opacity: 0 }}
       className="fixed inset-0 z-[200] flex items-center justify-center bg-black/95 backdrop-blur-2xl"
       onClick={onClose}
+      role="dialog"
+      aria-modal="true"
+      aria-label={images[idx]?.label ?? 'Фото'}
     >
       <button
-        aria-label="Закрыть"
+        aria-label="Закрыть фото"
         className="absolute top-5 right-5 p-2 text-white/50 hover:text-white transition-colors z-10"
         onClick={onClose}
       >
@@ -106,14 +134,14 @@ function PhotoLightbox({
       {images.length > 1 && (
         <>
           <button
-            aria-label="Предыдущее"
+            aria-label="Предыдущее фото"
             onClick={e => { e.stopPropagation(); setIdx(i => (i - 1 + images.length) % images.length); }}
             className="absolute left-4 top-1/2 -translate-y-1/2 p-3 rounded-full text-white/60 hover:text-[#c8a96e] hover:bg-white/5 transition-all z-10"
           >
             <ChevronLeft className="w-8 h-8" />
           </button>
           <button
-            aria-label="Следующее"
+            aria-label="Следующее фото"
             onClick={e => { e.stopPropagation(); setIdx(i => (i + 1) % images.length); }}
             className="absolute right-4 top-1/2 -translate-y-1/2 p-3 rounded-full text-white/60 hover:text-[#c8a96e] hover:bg-white/5 transition-all z-10"
           >
@@ -132,16 +160,14 @@ function PhotoLightbox({
           className="relative max-w-4xl w-full h-[80vh] mx-8"
           onClick={e => e.stopPropagation()}
         >
-          {/* Skeleton вместо blur */}
           <ImageSkeleton loaded={imgLoaded} />
-
           <Image
             src={images[idx].src}
             alt={images[idx].label}
             fill
             className="object-contain"
             sizes="100vw"
-            priority  // В лайтбоксе всегда priority
+            priority
             quality={88}
             onLoad={() => setImgLoaded(true)}
           />
@@ -152,10 +178,13 @@ function PhotoLightbox({
       </AnimatePresence>
 
       {images.length > 1 && (
-        <div className="absolute bottom-6 left-1/2 -translate-x-1/2 flex gap-2">
+        <div className="absolute bottom-6 left-1/2 -translate-x-1/2 flex gap-2" role="tablist">
           {images.map((_, i) => (
             <button
               key={i}
+              role="tab"
+              aria-selected={i === idx}
+              aria-label={`Фото ${i + 1}`}
               onClick={e => { e.stopPropagation(); setIdx(i); }}
               className={cn(
                 'h-1.5 rounded-full transition-all duration-300',
@@ -185,17 +214,15 @@ function ServiceModal({
     item => item.cat === (SERVICE_GALLERY[service.title] ?? '')
   );
 
-  // При открытии модалки сразу preload всех фото этой категории
   useEffect(() => {
     if (galleryImages.length > 0) {
-      // Первое фото — сразу (пользователь может кликнуть немедленно)
       preloader.preload(galleryImages[0].src, LIGHTBOX_WIDTH);
-      // Остальные — через idle callback
       preloader.preloadMany(
         galleryImages.slice(1).map(i => i.src),
         LIGHTBOX_WIDTH
       );
     }
+  // galleryImages стабилен: зависит от service.title (константа при открытии)
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [service.title]);
 
@@ -222,6 +249,7 @@ function ServiceModal({
           transition={{ duration: 0.25 }}
           className="absolute inset-0 bg-[#0f0905]/85 backdrop-blur-md"
           onClick={onClose}
+          aria-hidden="true"
         />
 
         <motion.div
@@ -241,6 +269,7 @@ function ServiceModal({
           <div
             className="absolute -top-20 -right-20 w-72 h-72 rounded-full pointer-events-none"
             style={{ background: 'radial-gradient(circle, rgba(200,169,110,0.12) 0%, transparent 70%)' }}
+            aria-hidden="true"
           />
 
           <motion.button
@@ -268,6 +297,7 @@ function ServiceModal({
                   border: '1px solid rgba(200,169,110,0.2)',
                   boxShadow: '0 0 20px rgba(200,169,110,0.12)',
                 }}
+                aria-hidden="true"
               >
                 <Icon size={34} className="text-[#c8a96e]" strokeWidth={1.4} />
               </div>
@@ -300,6 +330,7 @@ function ServiceModal({
                 transition={{ delay: 0.34, duration: 0.5 }}
                 className="h-px origin-left"
                 style={{ background: 'linear-gradient(90deg, rgba(200,169,110,0.4), transparent)' }}
+                aria-hidden="true"
               />
               <motion.p
                 initial={{ opacity: 0, y: 8 }}
@@ -324,12 +355,14 @@ function ServiceModal({
                   {galleryImages.length > 3 && (
                     <div className="flex gap-1">
                       <button
+                        aria-label="Предыдущие работы"
                         onClick={() => swiperRef.current?.slidePrev()}
                         className="w-6 h-6 rounded-full flex items-center justify-center text-white/40 hover:text-[#c8a96e] hover:bg-white/5 transition-all"
                       >
                         <ChevronLeft size={14} />
                       </button>
                       <button
+                        aria-label="Следующие работы"
                         onClick={() => swiperRef.current?.slideNext()}
                         className="w-6 h-6 rounded-full flex items-center justify-center text-white/40 hover:text-[#c8a96e] hover:bg-white/5 transition-all"
                       >
@@ -386,7 +419,7 @@ function ServiceModal({
                 style={{ backgroundColor: '#c8a96e', boxShadow: '0 4px 20px rgba(200,169,110,0.35)' }}
               >
                 Заказать расчёт
-                <ArrowRight size={16} />
+                <ArrowRight size={16} aria-hidden="true" />
               </motion.button>
             </motion.div>
           </div>
@@ -406,7 +439,7 @@ function ServiceModal({
   );
 }
 
-// ─── Thumbnail Card (вынесен для чистоты) ─────────────────────────────────────
+// ─── Thumbnail Card ───────────────────────────────────────────────────────────
 function ThumbCard({
   img, index, onHover, onClick,
 }: {
@@ -424,10 +457,12 @@ function ThumbCard({
       onMouseEnter={onHover}
       onTouchStart={onHover}
       onClick={onClick}
+      role="button"
+      aria-label={`Открыть фото: ${img.label}`}
+      tabIndex={0}
+      onKeyDown={e => e.key === 'Enter' && onClick()}
     >
-      {/* Skeleton для миниатюр */}
       <ImageSkeleton loaded={loaded} />
-
       <Image
         src={img.src}
         alt={img.label}
@@ -438,14 +473,13 @@ function ThumbCard({
         quality={70}
         onLoad={() => setLoaded(true)}
       />
-
-      {/* Hover overlay */}
       <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-all duration-300 flex items-center justify-center">
-        <ZoomIn size={20} className="text-white opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+        <ZoomIn size={20} className="text-white opacity-0 group-hover:opacity-100 transition-opacity duration-300" aria-hidden="true" />
       </div>
       <div
         className="absolute inset-0 rounded-xl opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none"
         style={{ boxShadow: 'inset 0 0 0 1.5px rgba(200,169,110,0.6)' }}
+        aria-hidden="true"
       />
     </div>
   );
@@ -462,7 +496,6 @@ function BentoCard({
   const Icon = ICON_MAP[service.iconName] ?? Layers;
   const isFeatured = index === 0;
 
-  // Preload при наведении на карточку услуги
   const handleHover = useCallback(() => {
     const category = SERVICE_GALLERY[service.title];
     if (!category) return;
@@ -480,6 +513,7 @@ function BentoCard({
       transition={{ delay: index * 0.06, duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
       whileHover={{ scale: 1.02 }}
       whileTap={{ scale: 0.98 }}
+      aria-label={`Узнать подробнее: ${service.title}`}
       className={cn(
         'group relative text-left rounded-2xl overflow-hidden cursor-pointer transition-all duration-500',
         CELL_CLASSES[index] ?? 'col-span-1 row-span-1',
@@ -495,10 +529,12 @@ function BentoCard({
       <div
         className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none"
         style={{ background: 'radial-gradient(ellipse at 30% 50%, rgba(200,169,110,0.07) 0%, transparent 70%)' }}
+        aria-hidden="true"
       />
       <div
         className="absolute inset-0 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none"
         style={{ boxShadow: 'inset 0 0 0 1px rgba(200,169,110,0.35)' }}
+        aria-hidden="true"
       />
 
       <div className={cn('relative z-10 h-full flex', isFeatured ? 'flex-col p-6' : 'items-center gap-3 p-4')}>
@@ -508,6 +544,7 @@ function BentoCard({
             isFeatured ? 'w-12 h-12 mb-auto group-hover:scale-110' : 'w-9 h-9 group-hover:scale-105',
           )}
           style={{ background: 'rgba(200,169,110,0.08)', border: '1px solid rgba(200,169,110,0.12)' }}
+          aria-hidden="true"
         >
           <Icon size={isFeatured ? 24 : 18} className="text-[#c8a96e]" strokeWidth={1.4} />
         </div>
@@ -518,12 +555,16 @@ function BentoCard({
           >
             {service.title}
           </p>
-          {isFeatured && <p className="text-white/45 text-sm leading-relaxed line-clamp-2">{service.desc}</p>}
-          {!isFeatured && <p className="text-white/35 text-[10px] mt-0.5 leading-snug line-clamp-1">{service.short}</p>}
+          {isFeatured && (
+            <p className="text-white/45 text-sm leading-relaxed line-clamp-2">{service.desc}</p>
+          )}
+          {!isFeatured && (
+            <p className="text-white/35 text-[10px] mt-0.5 leading-snug line-clamp-1">{service.short}</p>
+          )}
         </div>
         {isFeatured && (
           <div className="mt-4 flex items-center gap-2 text-[#c8a96e] text-xs font-bold uppercase tracking-wider opacity-0 -translate-y-1 group-hover:opacity-100 group-hover:translate-y-0 transition-all duration-300">
-            Подробнее <ArrowRight size={12} />
+            Подробнее <ArrowRight size={12} aria-hidden="true" />
           </div>
         )}
       </div>
@@ -534,22 +575,23 @@ function BentoCard({
 // ─── Section ──────────────────────────────────────────────────────────────────
 export default function ServicesSection() {
   const [selectedService, setSelectedService] = useState<Service | null>(null);
+  // Сохраняем позицию скролла в ref, а не в state (не нужен рендер)
+  const savedScrollYRef = useRef(0);
 
   useEffect(() => {
     if (selectedService) {
-      const scrollY = window.scrollY;
-      document.body.style.overflow = 'hidden';
-      document.body.style.height = '100%';
+      // FIX: используем document.documentElement (как Navbar) вместо body
+      savedScrollYRef.current = lockScroll();
       return () => {
-        document.body.style.overflow = '';
-        document.body.style.height = '';
-        window.scrollTo(0, scrollY);
+        unlockScroll(savedScrollYRef.current);
       };
     }
   }, [selectedService]);
 
   const handleCta = useCallback((_title: string) => {
     setSelectedService(null);
+    // FIX: увеличен таймаут до 380мс = длительность exit-анимации модалки
+    // Иначе scrollTo вызывался до unlock, и страница прокручивалась в 0
     setTimeout(() => {
       const el = document.getElementById('contact');
       if (!el) return;
@@ -557,22 +599,24 @@ export default function ServicesSection() {
       const offset = isMobile ? 106 : 68;
       const top = el.getBoundingClientRect().top + window.scrollY - offset;
       window.scrollTo({ top, behavior: 'smooth' });
-    }, 300);
+    }, 380);
   }, []);
 
   return (
     <section
       id="services"
+      aria-label="Наши услуги"
       className="relative py-10 lg:py-14 overflow-hidden"
       style={{ background: 'linear-gradient(180deg, #1a1008 0%, #150d05 100%)' }}
     >
       <div
         className="absolute inset-0 pointer-events-none"
         style={{ background: 'radial-gradient(ellipse 60% 40% at 50% 0%, rgba(200,169,110,0.06) 0%, transparent 70%)' }}
+        aria-hidden="true"
       />
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
         <div className="flex flex-col items-center text-center mb-8">
-          <div className="flex items-center gap-3 mb-3">
+          <div className="flex items-center gap-3 mb-3" aria-hidden="true">
             <div className="w-8 h-px bg-[#c8a96e]" />
             <span className="text-[#c8a96e] text-xs tracking-[0.2em] uppercase font-semibold">Наши услуги</span>
             <div className="w-8 h-px bg-[#c8a96e]" />
