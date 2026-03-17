@@ -1,26 +1,5 @@
 'use client';
 
-/**
- * ArticlesSection.tsx — исправленная версия
- *
- * Исправления второго прохода:
- * ─────────────────────────────────────────────────────────────────
- * 1. BUG FIX: ArticleModal использовал document.body.style.overflow,
- *    как и старый ServicesSection. Заменено на document.documentElement,
- *    чтобы не конфликтовать с Navbar и ServicesSection.
- *
- * 2. BUG FIX: onMouseEnter + onTouchStart на touch-устройстве могут
- *    оба сработать на одно касание (touch → mousemove → mouseenter),
- *    вызывая двойной preload вызов. Заменено на onPointerEnter —
- *    один событие на оба типа устройств.
- *
- * 3. a11y: ArticleModal получил aria-labelledby вместо aria-label,
- *    так как заголовок уже присутствует в разметке.
- *
- * 4. Scroll position восстанавливается корректно при закрытии модалки:
- *    сохраняем Y перед блокировкой, восстанавливаем только если изменилась.
- */
-
 import { ArrowRight, Calendar, ChevronLeft, ChevronRight, X } from 'lucide-react';
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import Image from 'next/image';
@@ -44,13 +23,12 @@ const LAYOUT_TRANSITION = {
   duration: 0.38,
 };
 
-// ─── Scroll helpers (единый подход: documentElement) ─────────────────────────
+// ─── Scroll helpers ────────────────────────────────────────────────────────────
 function lockBodyScroll(): number {
   const y = window.scrollY;
   document.documentElement.style.overflow = 'hidden';
   return y;
 }
-
 function unlockBodyScroll(savedY: number) {
   document.documentElement.style.overflow = '';
   if (Math.abs(window.scrollY - savedY) > 1) {
@@ -65,7 +43,6 @@ function ArticleModal({ article, onClose }: { article: Article; onClose: () => v
   const savedScrollY = useRef(0);
 
   useEffect(() => {
-    // FIX: был document.body — теперь documentElement (как Navbar)
     savedScrollY.current = lockBodyScroll();
     const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
     window.addEventListener('keydown', handler);
@@ -104,7 +81,6 @@ function ArticleModal({ article, onClose }: { article: Article; onClose: () => v
         }}
         transition={LAYOUT_TRANSITION}
       >
-        {/* Image header */}
         <div className="relative h-52 sm:h-64 shrink-0 bg-[#1a1008]">
           <ImageSkeleton loaded={imgLoaded} />
           <Image
@@ -115,9 +91,10 @@ function ArticleModal({ article, onClose }: { article: Article; onClose: () => v
             sizes="(max-width: 640px) 100vw, 672px"
             priority
             quality={80}
+            draggable={false}
             onLoad={() => setImgLoaded(true)}
           />
-          <div className="absolute inset-0 bg-gradient-to-t from-[#150d05] via-transparent to-transparent opacity-90" aria-hidden="true" />
+          <div className="absolute inset-0 bg-gradient-to-t from-[#150d05] via-transparent to-transparent opacity-90 pointer-events-none" aria-hidden="true" />
           <button
             onClick={onClose}
             aria-label="Закрыть статью"
@@ -126,7 +103,7 @@ function ArticleModal({ article, onClose }: { article: Article; onClose: () => v
             <X className="w-4 h-4" />
           </button>
           <div
-            className="absolute top-4 left-4 flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] text-white/90 font-medium uppercase tracking-wider backdrop-blur-md"
+            className="absolute top-4 left-4 flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] text-white/90 font-medium uppercase tracking-wider backdrop-blur-md pointer-events-none"
             style={{ background: 'rgba(0,0,0,0.45)', border: '1px solid rgba(255,255,255,0.1)' }}
             aria-hidden="true"
           >
@@ -135,7 +112,6 @@ function ArticleModal({ article, onClose }: { article: Article; onClose: () => v
           </div>
         </div>
 
-        {/* Content */}
         <div className="flex-1 overflow-y-auto overscroll-contain">
           <div className="p-6 sm:p-8">
             <span className="inline-block px-3 py-1 mb-4 rounded-full bg-[#c8a96e] text-[#1a1008] text-[10px] font-bold tracking-[0.15em] uppercase shadow-lg shadow-[#c8a96e]/20">
@@ -168,9 +144,7 @@ function ArticleModal({ article, onClose }: { article: Article; onClose: () => v
             </div>
           </div>
         </div>
-
-        {/* Mobile drag indicator */}
-        <div className="sm:hidden absolute top-3 left-1/2 -translate-x-1/2 w-10 h-1 rounded-full bg-white/20" aria-hidden="true" />
+        <div className="sm:hidden absolute top-3 left-1/2 -translate-x-1/2 w-10 h-1 rounded-full bg-white/20 pointer-events-none" aria-hidden="true" />
       </motion.div>
     </div>
   );
@@ -197,8 +171,6 @@ export default function ArticlesSection() {
     preloader.preloadMany(ARTICLES.map(a => a.image), ARTICLE_MODAL_WIDTH);
   }, [visible]);
 
-  // FIX: заменён onMouseEnter+onTouchStart на onPointerEnter —
-  // единое событие для мыши, touch и стилуса без риска дублирования.
   const handleCardPreload = useCallback((article: Article) => {
     preloader.preload(article.image, ARTICLE_MODAL_WIDTH, 80);
   }, []);
@@ -256,14 +228,54 @@ export default function ArticlesSection() {
             </button>
 
             {/*
-             * CSS переопределения z-index для корректного наслоения карточек.
-             * depth:350 + modifier:2 создаёт сильную перспективу — без z-index
-             * дальние слайды могут "вылезти" поверх активного.
+             * ─── SWIPE FIX: три слоя защиты ───────────────────────────────────
+             *
+             * ПРОБЛЕМА 1 — нативный drag изображений (главная причина на PC):
+             *   Браузер по умолчанию позволяет перетаскивать <img>.
+             *   При mousedown → mousemove браузер входит в режим "drag image",
+             *   перехватывает pointermove у document → Swiper не видит движения
+             *   и не считает жест свайпом.
+             *   РЕШЕНИЕ: img { -webkit-user-drag: none } + draggable={false} на <Image>.
+             *
+             * ПРОБЛЕМА 2 — выделение текста при свайпе (PC и Android):
+             *   При движении мышью/пальцем браузер начинает выделять текст,
+             *   переключается в Selection mode и отменяет drag-события.
+             *   Swiper перестаёт получать pointermove.
+             *   РЕШЕНИЕ: user-select: none на всём содержимом слайда.
+             *
+             * ПРОБЛЕМА 3 — touch-action (iOS Safari, Android Chrome):
+             *   Если не указан touch-action, браузер конкурирует с Swiper
+             *   за горизонтальные жесты. На iOS может срабатывать back-gesture.
+             *   РЕШЕНИЕ: touch-action: pan-y — браузер обрабатывает только
+             *   вертикальный скролл, горизонталь отдаёт Swiper.
+             *
+             * ПРОБЛЕМА 4 — pointer-events на оверлеях:
+             *   Полупрозрачные div-оверлеи (градиент, дата) без pointer-events:none
+             *   перехватывают события и не дают им дойти до Swiper container.
+             *   РЕШЕНИЕ: pointer-events-none на всех декоративных оверлеях.
              */}
             <style>{`
+              .articles-coverflow-swiper .swiper-wrapper {
+                /* touch-action на wrapper — Swiper сам устанавливает, но
+                   явное задание предотвращает переопределение браузером */
+                touch-action: pan-y;
+              }
+              .articles-coverflow-swiper .swiper-slide img {
+                /* Запрет нативного drag на изображениях — ключевой фикс для PC */
+                -webkit-user-drag: none;
+                user-drag: none;
+                pointer-events: none; /* img не должен перехватывать события */
+              }
+              .articles-coverflow-swiper .swiper-slide * {
+                /* Запрет выделения текста во время свайпа */
+                user-select: none;
+                -webkit-user-select: none;
+              }
               .articles-coverflow-swiper .swiper-slide {
                 isolation: isolate;
+                touch-action: pan-y;
               }
+              /* z-index переопределения для корректного наслоения при depth:350 */
               .articles-coverflow-swiper .swiper-slide-active {
                 opacity: 1 !important;
                 filter: none !important;
@@ -283,7 +295,7 @@ export default function ArticlesSection() {
                 modules={[Autoplay, EffectCoverflow]}
                 onSwiper={swiper => { swiperRef.current = swiper; }}
                 effect="coverflow"
-                grabCursor
+                grabCursor            // курсор-рука на PC
                 centeredSlides
                 slidesPerView="auto"
                 slideToClickedSlide
@@ -296,20 +308,31 @@ export default function ArticlesSection() {
                 }}
                 autoplay={{ delay: 5000, disableOnInteraction: true }}
                 watchSlidesProgress
-                // Плавность свайпа: меньше resistance — естественнее на тач
+                simulateTouch         // явно: mouse-drag работает как touch-drag
+                // touchStartPreventDefault: false — НЕ блокируем preventDefault на touchstart,
+                // иначе клик по карточке не сработает на iOS
+                touchStartPreventDefault={false}
                 resistance
                 resistanceRatio={0.85}
                 speed={500}
+                threshold={5}         // 5px до начала свайпа — мгновенный отклик
               >
                 {ARTICLES.map((a, i) => (
                   <SwiperSlide key={a.id} className="!w-[85%] sm:!w-[420px] h-auto">
                     <motion.article
                       layoutId={`article-card-${a.id}`}
                       onClick={() => setActiveArticle(a)}
-                      // FIX: onPointerEnter вместо onMouseEnter+onTouchStart
                       onPointerEnter={() => handleCardPreload(a)}
                       className="group relative h-full rounded-3xl overflow-hidden flex flex-col cursor-pointer shadow-2xl bg-[#1a1008]/80 backdrop-blur-xl"
-                      style={{ border: '1px solid rgba(200,169,110,0.1)' }}
+                      style={{
+                        border: '1px solid rgba(200,169,110,0.1)',
+                        // touchAction: pan-y на уровне motion-элемента —
+                        // Framer Motion уважает это и не вызывает preventDefault
+                        // на горизонтальные gesture-события
+                        touchAction: 'pan-y',
+                        userSelect: 'none',
+                        WebkitUserSelect: 'none',
+                      }}
                       transition={LAYOUT_TRANSITION}
                       role="button"
                       aria-label={`Читать статью: ${a.title}`}
@@ -326,12 +349,17 @@ export default function ArticlesSection() {
                           priority={i < 2}
                           loading={i < 2 ? undefined : 'lazy'}
                           quality={80}
+                          // draggable={false} — запрет нативного drag на img-элементе
+                          // (дублирует CSS, но Next/Image может игнорировать CSS-правило
+                          // на внутреннем img без явного атрибута)
+                          draggable={false}
                           placeholder="blur"
                           blurDataURL="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDIwIiBoZWlnaHQ9IjI1NiIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iNDIwIiBoZWlnaHQ9IjI1NiIgZmlsbD0iIzFhMTAwOCIvPjwvc3ZnPg=="
                         />
-                        <div className="absolute inset-0 bg-gradient-to-t from-[#1a1008] via-transparent to-transparent opacity-90" aria-hidden="true" />
+                        {/* pointer-events-none — оверлей не перехватывает события свайпа */}
+                        <div className="absolute inset-0 bg-gradient-to-t from-[#1a1008] via-transparent to-transparent opacity-90 pointer-events-none" aria-hidden="true" />
                         <div
-                          className="absolute top-4 right-4 bg-black/40 backdrop-blur-md px-3 py-1 rounded-full flex items-center gap-1.5 text-[10px] text-white/90 font-medium uppercase tracking-wider"
+                          className="absolute top-4 right-4 bg-black/40 backdrop-blur-md px-3 py-1 rounded-full flex items-center gap-1.5 text-[10px] text-white/90 font-medium uppercase tracking-wider pointer-events-none"
                           style={{ border: '1px solid rgba(255,255,255,0.1)' }}
                           aria-hidden="true"
                         >
