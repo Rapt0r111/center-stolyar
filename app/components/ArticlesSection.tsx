@@ -1,7 +1,28 @@
 'use client';
 
+/**
+ * ArticlesSection.tsx — исправленная версия
+ *
+ * Исправления второго прохода:
+ * ─────────────────────────────────────────────────────────────────
+ * 1. BUG FIX: ArticleModal использовал document.body.style.overflow,
+ *    как и старый ServicesSection. Заменено на document.documentElement,
+ *    чтобы не конфликтовать с Navbar и ServicesSection.
+ *
+ * 2. BUG FIX: onMouseEnter + onTouchStart на touch-устройстве могут
+ *    оба сработать на одно касание (touch → mousemove → mouseenter),
+ *    вызывая двойной preload вызов. Заменено на onPointerEnter —
+ *    один событие на оба типа устройств.
+ *
+ * 3. a11y: ArticleModal получил aria-labelledby вместо aria-label,
+ *    так как заголовок уже присутствует в разметке.
+ *
+ * 4. Scroll position восстанавливается корректно при закрытии модалки:
+ *    сохраняем Y перед блокировкой, восстанавливаем только если изменилась.
+ */
+
 import { ArrowRight, Calendar, ChevronLeft, ChevronRight, X } from 'lucide-react';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import Image from 'next/image';
 import { cn } from '@/lib/utils';
 import { ARTICLES } from '@/lib/data';
@@ -23,17 +44,34 @@ const LAYOUT_TRANSITION = {
   duration: 0.38,
 };
 
+// ─── Scroll helpers (единый подход: documentElement) ─────────────────────────
+function lockBodyScroll(): number {
+  const y = window.scrollY;
+  document.documentElement.style.overflow = 'hidden';
+  return y;
+}
+
+function unlockBodyScroll(savedY: number) {
+  document.documentElement.style.overflow = '';
+  if (Math.abs(window.scrollY - savedY) > 1) {
+    window.scrollTo({ top: savedY, behavior: 'instant' });
+  }
+}
+
 // ─── Article Modal ─────────────────────────────────────────────────────────────
 function ArticleModal({ article, onClose }: { article: Article; onClose: () => void }) {
   const [imgLoaded, setImgLoaded] = useState(false);
+  const titleId = useId();
+  const savedScrollY = useRef(0);
 
   useEffect(() => {
-    document.body.style.overflow = 'hidden';
+    // FIX: был document.body — теперь documentElement (как Navbar)
+    savedScrollY.current = lockBodyScroll();
     const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
     window.addEventListener('keydown', handler);
     return () => {
       window.removeEventListener('keydown', handler);
-      document.body.style.overflow = '';
+      unlockBodyScroll(savedScrollY.current);
     };
   }, [onClose]);
 
@@ -44,7 +82,7 @@ function ArticleModal({ article, onClose }: { article: Article; onClose: () => v
       className="fixed inset-0 z-[150] flex items-end sm:items-center justify-center p-0 sm:p-4"
       role="dialog"
       aria-modal="true"
-      aria-label={article.title}
+      aria-labelledby={titleId}
     >
       <motion.div
         initial={{ opacity: 0 }}
@@ -53,6 +91,7 @@ function ArticleModal({ article, onClose }: { article: Article; onClose: () => v
         transition={{ duration: 0.22, ease: 'easeOut' }}
         className="absolute inset-0 bg-black/80 backdrop-blur-md"
         onClick={onClose}
+        aria-hidden="true"
       />
       <motion.div
         layoutId={`article-card-${article.id}`}
@@ -65,6 +104,7 @@ function ArticleModal({ article, onClose }: { article: Article; onClose: () => v
         }}
         transition={LAYOUT_TRANSITION}
       >
+        {/* Image header */}
         <div className="relative h-52 sm:h-64 shrink-0 bg-[#1a1008]">
           <ImageSkeleton loaded={imgLoaded} />
           <Image
@@ -74,13 +114,13 @@ function ArticleModal({ article, onClose }: { article: Article; onClose: () => v
             className="object-cover"
             sizes="(max-width: 640px) 100vw, 672px"
             priority
-            quality={88}
+            quality={80}
             onLoad={() => setImgLoaded(true)}
           />
-          <div className="absolute inset-0 bg-gradient-to-t from-[#150d05] via-transparent to-transparent opacity-90" />
+          <div className="absolute inset-0 bg-gradient-to-t from-[#150d05] via-transparent to-transparent opacity-90" aria-hidden="true" />
           <button
             onClick={onClose}
-            aria-label="Закрыть"
+            aria-label="Закрыть статью"
             className="absolute top-4 right-4 w-9 h-9 rounded-full flex items-center justify-center bg-black/50 text-white/70 hover:text-white hover:bg-black/70 transition-all backdrop-blur-sm z-10"
           >
             <X className="w-4 h-4" />
@@ -88,18 +128,21 @@ function ArticleModal({ article, onClose }: { article: Article; onClose: () => v
           <div
             className="absolute top-4 left-4 flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] text-white/90 font-medium uppercase tracking-wider backdrop-blur-md"
             style={{ background: 'rgba(0,0,0,0.45)', border: '1px solid rgba(255,255,255,0.1)' }}
+            aria-hidden="true"
           >
             <Calendar className="w-3 h-3 text-[#c8a96e]" />
             {article.date}
           </div>
         </div>
 
+        {/* Content */}
         <div className="flex-1 overflow-y-auto overscroll-contain">
           <div className="p-6 sm:p-8">
             <span className="inline-block px-3 py-1 mb-4 rounded-full bg-[#c8a96e] text-[#1a1008] text-[10px] font-bold tracking-[0.15em] uppercase shadow-lg shadow-[#c8a96e]/20">
               {article.tag}
             </span>
             <h2
+              id={titleId}
               className="text-white text-2xl sm:text-3xl font-bold leading-snug mb-6"
               style={{ fontFamily: 'Georgia, serif' }}
             >
@@ -125,7 +168,9 @@ function ArticleModal({ article, onClose }: { article: Article; onClose: () => v
             </div>
           </div>
         </div>
-        <div className="sm:hidden absolute top-3 left-1/2 -translate-x-1/2 w-10 h-1 rounded-full bg-white/20" />
+
+        {/* Mobile drag indicator */}
+        <div className="sm:hidden absolute top-3 left-1/2 -translate-x-1/2 w-10 h-1 rounded-full bg-white/20" aria-hidden="true" />
       </motion.div>
     </div>
   );
@@ -152,8 +197,10 @@ export default function ArticlesSection() {
     preloader.preloadMany(ARTICLES.map(a => a.image), ARTICLE_MODAL_WIDTH);
   }, [visible]);
 
-  const handleCardHover = useCallback((article: Article) => {
-    preloader.preload(article.image, ARTICLE_MODAL_WIDTH, 88);
+  // FIX: заменён onMouseEnter+onTouchStart на onPointerEnter —
+  // единое событие для мыши, touch и стилуса без риска дублирования.
+  const handleCardPreload = useCallback((article: Article) => {
+    preloader.preload(article.image, ARTICLE_MODAL_WIDTH, 80);
   }, []);
 
   return (
@@ -161,6 +208,7 @@ export default function ArticlesSection() {
       <section
         id="articles"
         ref={sectionRef}
+        aria-label="Блог — полезные материалы"
         className="py-16 lg:py-20 overflow-hidden"
         style={{ background: 'linear-gradient(180deg, #1a1008 0%, #2a1d12 100%)' }}
       >
@@ -168,7 +216,7 @@ export default function ArticlesSection() {
 
           <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-12">
             <div>
-              <div className="flex items-center gap-4 mb-4">
+              <div className="flex items-center gap-4 mb-4" aria-hidden="true">
                 <div className="w-12 h-px bg-[#c8a96e]" />
                 <span className="text-[#c8a96e] text-xs tracking-widest uppercase font-medium">Блог</span>
               </div>
@@ -179,9 +227,12 @@ export default function ArticlesSection() {
                 Полезные <span className="text-[#c8a96e]">материалы</span>
               </h2>
             </div>
-            <button className="text-[#c8a96e] text-sm hover:text-[#d4b87e] flex items-center gap-2 group transition-colors whitespace-nowrap">
+            <button
+              className="text-[#c8a96e] text-sm hover:text-[#d4b87e] flex items-center gap-2 group transition-colors whitespace-nowrap"
+              aria-label="Смотреть все статьи"
+            >
               Все статьи
-              <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+              <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" aria-hidden="true" />
             </button>
           </div>
 
@@ -194,25 +245,22 @@ export default function ArticlesSection() {
               aria-label="Предыдущая статья"
               className="absolute left-0 lg:-left-12 top-1/2 -translate-y-1/2 z-20 w-12 h-12 lg:w-16 lg:h-16 rounded-full border border-[#c8a96e]/30 bg-[#1a1008]/40 backdrop-blur-md flex items-center justify-center text-[#c8a96e] hover:bg-[#c8a96e] hover:text-[#1a1008] transition-all duration-500 group shadow-2xl"
             >
-              <ChevronLeft className="w-6 h-6 lg:w-8 lg:h-8 group-hover:-translate-x-1 transition-transform" />
+              <ChevronLeft className="w-6 h-6 lg:w-8 lg:h-8 group-hover:-translate-x-1 transition-transform" aria-hidden="true" />
             </button>
             <button
               onClick={() => swiperRef.current?.slideNext()}
               aria-label="Следующая статья"
               className="absolute right-0 lg:-right-12 top-1/2 -translate-y-1/2 z-20 w-12 h-12 lg:w-16 lg:h-16 rounded-full border border-[#c8a96e]/30 bg-[#1a1008]/40 backdrop-blur-md flex items-center justify-center text-[#c8a96e] hover:bg-[#c8a96e] hover:text-[#1a1008] transition-all duration-500 group shadow-2xl"
             >
-              <ChevronRight className="w-6 h-6 lg:w-8 lg:h-8 group-hover:translate-x-1 transition-transform" />
+              <ChevronRight className="w-6 h-6 lg:w-8 lg:h-8 group-hover:translate-x-1 transition-transform" aria-hidden="true" />
             </button>
 
             {/*
-             * Ключевое исправление наслоения слайдов:
-             * - z-index !important переопределяет Swiper inline styles
-             * - depth 350 уводит дальние слайды глубже в 3D
+             * CSS переопределения z-index для корректного наслоения карточек.
+             * depth:350 + modifier:2 создаёт сильную перспективу — без z-index
+             * дальние слайды могут "вылезти" поверх активного.
              */}
             <style>{`
-              .articles-coverflow-swiper .swiper {
-                overflow: visible;
-              }
               .articles-coverflow-swiper .swiper-slide {
                 isolation: isolate;
               }
@@ -242,23 +290,31 @@ export default function ArticlesSection() {
                 coverflowEffect={{
                   rotate: 0,
                   stretch: 0,
-                  depth: 350,       // увеличено: дальние слайды уходят глубже
+                  depth: 350,
                   modifier: 2,
                   slideShadows: false,
                 }}
                 autoplay={{ delay: 5000, disableOnInteraction: true }}
                 watchSlidesProgress
+                // Плавность свайпа: меньше resistance — естественнее на тач
+                resistance
+                resistanceRatio={0.85}
+                speed={500}
               >
                 {ARTICLES.map((a, i) => (
                   <SwiperSlide key={a.id} className="!w-[85%] sm:!w-[420px] h-auto">
                     <motion.article
                       layoutId={`article-card-${a.id}`}
                       onClick={() => setActiveArticle(a)}
-                      onMouseEnter={() => handleCardHover(a)}
-                      onTouchStart={() => handleCardHover(a)}
+                      // FIX: onPointerEnter вместо onMouseEnter+onTouchStart
+                      onPointerEnter={() => handleCardPreload(a)}
                       className="group relative h-full rounded-3xl overflow-hidden flex flex-col cursor-pointer shadow-2xl bg-[#1a1008]/80 backdrop-blur-xl"
                       style={{ border: '1px solid rgba(200,169,110,0.1)' }}
                       transition={LAYOUT_TRANSITION}
+                      role="button"
+                      aria-label={`Читать статью: ${a.title}`}
+                      tabIndex={0}
+                      onKeyDown={e => e.key === 'Enter' && setActiveArticle(a)}
                     >
                       <div className="h-64 relative overflow-hidden w-full shrink-0">
                         <Image
@@ -273,10 +329,11 @@ export default function ArticlesSection() {
                           placeholder="blur"
                           blurDataURL="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDIwIiBoZWlnaHQ9IjI1NiIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iNDIwIiBoZWlnaHQ9IjI1NiIgZmlsbD0iIzFhMTAwOCIvPjwvc3ZnPg=="
                         />
-                        <div className="absolute inset-0 bg-gradient-to-t from-[#1a1008] via-transparent to-transparent opacity-90" />
+                        <div className="absolute inset-0 bg-gradient-to-t from-[#1a1008] via-transparent to-transparent opacity-90" aria-hidden="true" />
                         <div
                           className="absolute top-4 right-4 bg-black/40 backdrop-blur-md px-3 py-1 rounded-full flex items-center gap-1.5 text-[10px] text-white/90 font-medium uppercase tracking-wider"
                           style={{ border: '1px solid rgba(255,255,255,0.1)' }}
+                          aria-hidden="true"
                         >
                           <Calendar className="w-3 h-3 text-[#c8a96e]" />
                           {a.date}
@@ -300,7 +357,7 @@ export default function ArticlesSection() {
                           className="mt-auto pt-5 flex items-center justify-between"
                           style={{ borderTop: '1px solid rgba(255,255,255,0.05)' }}
                         >
-                          <span className="text-[#c8a96e] text-sm font-bold uppercase tracking-widest group-hover:text-[#d4b87e] transition-colors flex items-center gap-2">
+                          <span className="text-[#c8a96e] text-sm font-bold uppercase tracking-widest group-hover:text-[#d4b87e] transition-colors flex items-center gap-2" aria-hidden="true">
                             Читать полностью
                             <ArrowRight className="w-4 h-4 opacity-0 -translate-x-2 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-300" />
                           </span>

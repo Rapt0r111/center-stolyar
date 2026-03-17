@@ -1,81 +1,90 @@
 /**
- * image-preloader.ts
+ * image-preloader.ts — v2 (исправленная версия)
  *
- * Singleton-преloadер изображений.
- * Генерирует точные /_next/image URL (с правильным bucket-размером)
- * и предзагружает их до того, как пользователь нажмёт на миниатюру.
+ * Исправления:
+ * ─────────────────────────────────────────────────────────────────
+ * 1. BUG FIX: Дефолтное quality изменено с 85 на 80.
+ *    Причина: next.config.ts задаёт qualities: [70, 75, 80, 85, 90].
+ *    Большинство компонентов используют quality={80}.
+ *    Если preloader запрашивал q=85, а компонент q=80 — URL не совпадал,
+ *    браузерный кэш не срабатывал, изображение грузилось дважды.
  *
- * Использование:
- *   import { preloader } from '@/lib/image-preloader';
- *   preloader.preload('/images/gallery/stair-1.jpg', 1920);
+ * 2. УЛУЧШЕНИЕ: Добавлена стратегия <link rel="preload"> как основная
+ *    для критичных изображений (лайтбокс при открытии).
+ *    fetch() остаётся фолбэком.
+ *    <link rel="preload as="image"> имеет наивысший приоритет браузера
+ *    и напрямую попадает в prefetch cache (не конкурирует с render).
+ *
+ * 3. Документация: явно указано, что quality должен совпадать
+ *    с values в next.config.ts → qualities.
  */
 
 // ─── Размерные бакеты из next.config.ts ──────────────────────────────────────
-// Должны совпадать с deviceSizes + imageSizes в next.config.ts
 const DEVICE_SIZES = [640, 750, 828, 1080, 1200, 1920];
 const IMAGE_SIZES  = [16, 32, 48, 64, 96, 128, 256, 384];
 const ALL_WIDTHS   = [...IMAGE_SIZES, ...DEVICE_SIZES].sort((a, b) => a - b);
 
-/**
- * Находит ближайший ширший бакет Next.js Image Optimization.
- * Если запросить /_next/image?w=450, Next.js ответит 500 (ближайший бакет).
- * Чтобы preload URL совпал с тем, что запросит <Image />, нужен тот же бакет.
- */
 export function nearestNextWidth(displayWidth: number): number {
   return ALL_WIDTHS.find(w => w >= displayWidth) ?? DEVICE_SIZES[DEVICE_SIZES.length - 1];
 }
 
-/**
- * Конструирует URL, который Next.js Image Optimization реально обслуживает.
- * Важно: браузер кэширует по URL, поэтому preload и <Image /> должны
- * запрашивать ОДИНАКОВЫЙ URL — только тогда кэш сработает.
- */
-export function nextImageUrl(src: string, displayWidth: number, quality = 85): string {
+export function nextImageUrl(src: string, displayWidth: number, quality = 80): string {
   const w = nearestNextWidth(displayWidth);
   return `/_next/image?url=${encodeURIComponent(src)}&w=${w}&q=${quality}`;
 }
 
 // ─── Singleton-класс ──────────────────────────────────────────────────────────
 class ImagePreloaderService {
-  /** Хранит URL, которые уже были поставлены в очередь загрузки */
   private readonly queued = new Set<string>();
 
   /**
    * Предзагружает одно изображение.
    *
-   * @param src          — путь в /public (например '/images/gallery/stair-1.jpg')
-   * @param displayWidth — ожидаемая ширина отображения (px). Используем максимальную
-   *                       ширину экрана, на которой будет показано фото.
-   * @param quality      — качество (должно совпадать с quality у <Image />)
+   * ВАЖНО: quality должен совпадать с quality у <Image /> компонента
+   * И быть одним из значений из next.config.ts → qualities: [70, 75, 80, 85, 90].
+   *
+   * Дефолт: 80 — наиболее часто используемый в проекте.
    */
-  preload(src: string, displayWidth: number, quality = 85): void {
-    if (typeof window === 'undefined') return; // SSR guard
+  preload(src: string, displayWidth: number, quality = 80): void {
+    if (typeof window === 'undefined') return;
 
     const url = nextImageUrl(src, displayWidth, quality);
-    if (this.queued.has(url)) return; // уже в очереди
+    if (this.queued.has(url)) return;
     this.queued.add(url);
 
-    // ── Стратегия 1: fetch с высоким приоритетом (Chrome 101+, Safari 17.2+) ─
-    // Это самый быстрый способ — браузер грузит и кэширует файл.
-    // Используем 'high' через type assertion так как TypeScript ещё не знает
-    // об этом экспериментальном поле Priority Hints API.
+    // ── Стратегия 1: <link rel="preload"> — наивысший браузерный приоритет ─
+    // Попадает в prefetch cache и не конкурирует с критическим рендерингом.
+    try {
+      const link = document.createElement('link');
+      link.rel = 'preload';
+      link.as = 'image';
+      link.href = url;
+      // fetchpriority: 'high' для лайтбокса — браузер грузит немедленно
+      (link as HTMLLinkElement & { fetchPriority?: string }).fetchPriority = 'high';
+      document.head.appendChild(link);
+      return;
+    } catch {
+      // Фолбэк если DOM недоступен
+    }
+
+    // ── Стратегия 2: fetch с Priority Hints ──────────────────────────────────
     try {
       fetch(url, { priority: 'high' } as RequestInit & { priority: string }).catch(() => {
         this._fallbackImage(url);
       });
     } catch {
-      // ── Стратегия 2: new Image() — работает везде ──────────────────────────
       this._fallbackImage(url);
     }
   }
 
   /**
-   * Предзагружает массив изображений (например, все слайды галереи).
-   * Запускает загрузки параллельно, но не блокирует UI.
+   * Предзагружает массив изображений через requestIdleCallback.
+   * Не блокирует LCP и основной поток.
    */
-  preloadMany(srcs: string[], displayWidth: number, quality = 85): void {
-    // Используем idle callback если доступен, чтобы не мешать LCP
+  preloadMany(srcs: string[], displayWidth: number, quality = 80): void {
     const run = () => srcs.forEach(src => this.preload(src, displayWidth, quality));
+
+    if (typeof window === 'undefined') return;
 
     if ('requestIdleCallback' in window) {
       requestIdleCallback(run, { timeout: 2000 });
@@ -85,20 +94,15 @@ class ImagePreloaderService {
   }
 
   /**
-   * Предзагружает изображения с задержкой — для соседних слайдов,
-   * которые нужны "скоро", но не прямо сейчас.
+   * Предзагружает изображения с задержкой — для соседних слайдов.
    */
-  preloadDeferred(srcs: string[], displayWidth: number, delayMs = 300): void {
+  preloadDeferred(srcs: string[], displayWidth: number, delayMs = 300, quality = 80): void {
     setTimeout(() => {
-      srcs.forEach(src => this.preload(src, displayWidth));
+      srcs.forEach(src => this.preload(src, displayWidth, quality));
     }, delayMs);
   }
 
-  /**
-   * Проверяет, было ли изображение уже поставлено в очередь загрузки.
-   * Полезно, чтобы избежать дублирующих операций в компонентах.
-   */
-  isQueued(src: string, displayWidth: number, quality = 85): boolean {
+  isQueued(src: string, displayWidth: number, quality = 80): boolean {
     return this.queued.has(nextImageUrl(src, displayWidth, quality));
   }
 
@@ -108,14 +112,9 @@ class ImagePreloaderService {
   }
 }
 
-/**
- * Глобальный синглтон — импортируйте его в любом компоненте.
- * Кэш живёт весь сеанс пользователя и шарится между компонентами,
- * поэтому одно и то же фото не будет грузиться дважды.
- */
 export const preloader = new ImagePreloaderService();
 
-// ─── Вспомогательные константы ───────────────────────────────────────────────
+// ─── Константы ───────────────────────────────────────────────────────────────
 /** Размер для предзагрузки полноэкранного лайтбокса */
 export const LIGHTBOX_WIDTH = 1920;
 
@@ -124,3 +123,13 @@ export const GALLERY_CARD_WIDTH = 828;
 
 /** Размер для предзагрузки статей */
 export const ARTICLE_MODAL_WIDTH = 672;
+
+/**
+ * Качество для лайтбокса — используйте это значение везде,
+ * где нужно максимальное качество (модалки, лайтбоксы).
+ * Должно совпадать с next.config.ts → qualities.
+ */
+export const QUALITY_HIGH = 85;
+
+/** Качество для карточек и превью */
+export const QUALITY_THUMB = 80;
