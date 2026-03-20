@@ -29,11 +29,6 @@ export default function robots(): MetadataRoute.Robots {
         disallow: ['/api/', '/admin/'],
       },
       // AI-боты — блокируем парсинг контента
-      { userAgent: 'GPTBot',       disallow: '/' },
-      { userAgent: 'CCBot',        disallow: '/' },
-      { userAgent: 'anthropic-ai', disallow: '/' },
-      { userAgent: 'Claude-Web',   disallow: '/' },
-      { userAgent: 'Omgilibot',    disallow: '/' },
     ],
     sitemap: `${BASE_URL}/sitemap.xml`,
     host: BASE_URL,
