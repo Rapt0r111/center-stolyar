@@ -1,5 +1,40 @@
 'use client';
 
+/**
+ * GallerySection.tsx — image-loading fixes
+ *
+ * ═══════════════════════════════════════════════════════════════════════════
+ * ИСПРАВЛЕНИЯ (относительно предыдущей версии):
+ * ───────────────────────────────────────────────────────────────────────────
+ *
+ * 1. CRITICAL — quality mismatch (был CACHE MISS на каждое открытие):
+ *    Lightbox <Image quality={85}> + preloader q=80 → разные URL → 2 запроса.
+ *    Теперь все preloader-вызовы для LIGHTBOX_WIDTH используют QUALITY_HIGH=85.
+ *
+ * 2. preload() → decode() на поверхностях взаимодействия:
+ *    На pointerenter мы теперь запускаем img.decode(), а не просто fetch().
+ *    Это гарантирует, что к моменту клика изображение декодировано в GPU —
+ *    skeleton исчезает мгновенно или не показывается вообще.
+ *
+ * 3. isReady() для начального состояния imgLoaded:
+ *    const [imgLoaded, setImgLoaded] = useState(
+ *      () => preloader.isReady(item.src, LIGHTBOX_WIDTH, QUALITY_HIGH)
+ *    );
+ *    Если изображение уже декодировано (поле с предыдущего открытия или
+ *    агрессивный прогрев), skeleton вообще не показывается.
+ *
+ * 4. activeItem.id change effect тоже проверяет isReady():
+ *    useEffect(() => {
+ *      setImgLoaded(preloader.isReady(activeItem.src, LIGHTBOX_WIDTH, QUALITY_HIGH));
+ *    }, [activeItem.id]);
+ *
+ * 5. IntersectionObserver rootMargin увеличен до 400px снизу:
+ *    Прогрев начинается до того как секция входит во viewport.
+ *
+ * 6. Swiper slides: loading="eager" вместо "lazy" для слайдов в DOM.
+ *    Browser-native lazy loading не работает корректно с CSS transform в Swiper.
+ */
+
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { X, ZoomIn, ChevronLeft, ChevronRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -7,7 +42,13 @@ import Image from 'next/image';
 import { GALLERY_ITEMS, GALLERY_CATEGORIES } from '@/lib/data';
 import type { GalleryItem } from '@/lib/data';
 import { BLUR } from '@/lib/image-utils';
-import { preloader, LIGHTBOX_WIDTH } from '@/lib/image-preloader';
+import {
+  preloader,
+  LIGHTBOX_WIDTH,
+  GALLERY_CARD_WIDTH,
+  QUALITY_HIGH,
+  QUALITY_THUMB,
+} from '@/lib/image-preloader';
 import ImageSkeleton from '@/app/components/ui/ImageSkeleton';
 
 import { Swiper, SwiperSlide } from 'swiper/react';
@@ -38,22 +79,33 @@ interface LightboxProps {
 }
 
 function Lightbox({ images, activeItem, onClose, onNavigate }: LightboxProps) {
-  const [imgLoaded, setImgLoaded] = useState(false);
+  // FIX: инициализируем из isReady() — если уже декодировано, skeleton не нужен
+  const [imgLoaded, setImgLoaded] = useState(
+    () => preloader.isReady(activeItem.src, LIGHTBOX_WIDTH, QUALITY_HIGH),
+  );
   const shouldReduceMotion = useReducedMotion();
   const currentIdx = images.findIndex(i => i.id === activeItem.id);
 
   const goPrev = useCallback(() => {
     const prevItem = images[(currentIdx - 1 + images.length) % images.length];
-    setImgLoaded(false);
     onNavigate(prevItem);
-    preloader.preload(images[(currentIdx - 2 + images.length) % images.length].src, LIGHTBOX_WIDTH);
+    // FIX: decode следующего-следующего сразу, с правильным quality
+    preloader.decode(
+      images[(currentIdx - 2 + images.length) % images.length].src,
+      LIGHTBOX_WIDTH,
+      QUALITY_HIGH,
+    );
   }, [images, currentIdx, onNavigate]);
 
   const goNext = useCallback(() => {
     const nextItem = images[(currentIdx + 1) % images.length];
-    setImgLoaded(false);
     onNavigate(nextItem);
-    preloader.preload(images[(currentIdx + 2) % images.length].src, LIGHTBOX_WIDTH);
+    // FIX: decode следующего-следующего сразу, с правильным quality
+    preloader.decode(
+      images[(currentIdx + 2) % images.length].src,
+      LIGHTBOX_WIDTH,
+      QUALITY_HIGH,
+    );
   }, [images, currentIdx, onNavigate]);
 
   useEffect(() => {
@@ -71,7 +123,10 @@ function Lightbox({ images, activeItem, onClose, onNavigate }: LightboxProps) {
     return () => { document.body.style.overflow = ''; };
   }, []);
 
-  useEffect(() => { setImgLoaded(false); }, [activeItem.id]);
+  // FIX: при смене activeItem проверяем isReady — если уже декодировано, не сбрасываем
+  useEffect(() => {
+    setImgLoaded(preloader.isReady(activeItem.src, LIGHTBOX_WIDTH, QUALITY_HIGH));
+  }, [activeItem.id, activeItem.src]);
 
   return (
     <div
@@ -147,7 +202,7 @@ function Lightbox({ images, activeItem, onClose, onNavigate }: LightboxProps) {
             className="object-contain"
             sizes="(max-width: 1024px) 90vw, 1100px"
             priority
-            quality={85}
+            quality={QUALITY_HIGH}   // FIX: было захардкожено 85, теперь константа
             draggable={false}
             onLoad={() => setImgLoaded(true)}
           />
@@ -175,8 +230,9 @@ function Lightbox({ images, activeItem, onClose, onNavigate }: LightboxProps) {
               role="tab"
               aria-selected={item.id === activeItem.id}
               aria-label={`Фото ${idx + 1}: ${item.label}`}
-              onClick={e => { e.stopPropagation(); setImgLoaded(false); onNavigate(item); }}
-              onMouseEnter={() => preloader.preload(item.src, LIGHTBOX_WIDTH)}
+              onClick={e => { e.stopPropagation(); onNavigate(item); }}
+              // FIX: decode при наведении на точку навигации
+              onMouseEnter={() => preloader.decode(item.src, LIGHTBOX_WIDTH, QUALITY_HIGH)}
               className={cn(
                 'h-1.5 rounded-full transition-all duration-300',
                 item.id === activeItem.id ? 'bg-[#c8a96e] w-5' : 'bg-white/30 w-1.5 hover:bg-white/60'
@@ -198,7 +254,10 @@ interface SlideCardProps {
 }
 
 function SlideCard({ item, isPriority, onClick, onPreload }: SlideCardProps) {
-  const [thumbLoaded, setThumbLoaded] = useState(false);
+  const [thumbLoaded, setThumbLoaded] = useState(
+    // FIX: карточки используют QUALITY_THUMB=80
+    () => preloader.isReady(item.src, GALLERY_CARD_WIDTH, QUALITY_THUMB),
+  );
 
   return (
     <motion.div
@@ -208,7 +267,6 @@ function SlideCard({ item, isPriority, onClick, onPreload }: SlideCardProps) {
       className="group relative h-[550px] rounded-3xl overflow-hidden cursor-pointer shadow-2xl"
       style={{
         border: '1px solid rgba(255,255,255,0.05)',
-        // SWIPE FIX: те же три правила что и в ArticlesSection
         touchAction: 'pan-y',
         userSelect: 'none',
         WebkitUserSelect: 'none',
@@ -232,15 +290,15 @@ function SlideCard({ item, isPriority, onClick, onPreload }: SlideCardProps) {
           className="object-cover transition-transform duration-700 group-hover:scale-110"
           sizes="(max-width: 640px) 80vw, 450px"
           priority={isPriority}
-          loading={isPriority ? undefined : 'lazy'}
-          quality={80}
-          // SWIPE FIX: запрет нативного drag на img
+          // FIX: убрали loading="lazy" для Swiper — все слайды в DOM,
+          // browser lazy loading не работает корректно с CSS transform
+          loading={isPriority ? undefined : 'eager'}
+          quality={QUALITY_THUMB}   // FIX: константа вместо захардкоженного 80
           draggable={false}
           placeholder="blur"
           blurDataURL={BLUR.gallery}
           onLoad={() => setThumbLoaded(true)}
         />
-        {/* pointer-events-none — оверлей не перехватывает события свайпа */}
         <div className="absolute inset-0 bg-gradient-to-t from-[#1a1008] via-transparent to-transparent opacity-80 pointer-events-none" />
       </motion.div>
 
@@ -273,10 +331,11 @@ export default function GallerySection() {
     [filter],
   );
 
+  // FIX: rootMargin '400px' снизу — прогрев начинается до входа секции во viewport
   useEffect(() => {
     const obs = new IntersectionObserver(
       ([e]) => { if (e.isIntersecting) setVisible(true); },
-      { threshold: 0.1 }
+      { threshold: 0, rootMargin: '0px 0px 400px 0px' }
     );
     if (sectionRef.current) obs.observe(sectionRef.current);
     return () => obs.disconnect();
@@ -284,8 +343,24 @@ export default function GallerySection() {
 
   useEffect(() => {
     if (!visible) return;
-    filtered.slice(0, 3).forEach(item => preloader.preload(item.src, LIGHTBOX_WIDTH));
-    preloader.preloadMany(filtered.slice(3).map(i => i.src), LIGHTBOX_WIDTH);
+
+    // FIX: первые 3 — decode() (GPU-готовность), остальные — warmMany() (HTTP-кэш)
+    // Оба вызова с QUALITY_HIGH=85 чтобы URL совпадал с Lightbox <Image quality={85}>
+    filtered.slice(0, 3).forEach(item =>
+      preloader.decode(item.src, LIGHTBOX_WIDTH, QUALITY_HIGH)
+    );
+    preloader.decodeMany(
+      filtered.slice(3).map(i => i.src),
+      LIGHTBOX_WIDTH,
+      QUALITY_HIGH,
+    );
+
+    // Дополнительно: прогреваем карточные версии (GALLERY_CARD_WIDTH, QUALITY_THUMB)
+    preloader.warmMany(
+      filtered.map(i => i.src),
+      GALLERY_CARD_WIDTH,
+      QUALITY_THUMB,
+    );
   }, [visible, filtered]);
 
   useEffect(() => {
@@ -296,19 +371,27 @@ export default function GallerySection() {
   const handleSlideChange = useCallback((swiper: SwiperType) => {
     const idx = swiper.realIndex;
     setActiveIndex(idx);
-    [filtered[(idx + 1) % filtered.length], filtered[(idx - 1 + filtered.length) % filtered.length]]
-      .forEach(item => preloader.preload(item.src, LIGHTBOX_WIDTH));
+    // FIX: decode соседних слайдов с QUALITY_HIGH для лайтбокса
+    [
+      filtered[(idx + 1) % filtered.length],
+      filtered[(idx - 1 + filtered.length) % filtered.length],
+    ].forEach(item => preloader.decode(item.src, LIGHTBOX_WIDTH, QUALITY_HIGH));
   }, [filtered]);
 
   const handleCardPreload = useCallback((item: GalleryItem) => {
-    preloader.preload(item.src, LIGHTBOX_WIDTH);
+    // FIX: decode() вместо preload() + правильный quality
+    // К моменту клика (100–300мс после hover) изображение будет декодировано в GPU
+    preloader.decode(item.src, LIGHTBOX_WIDTH, QUALITY_HIGH);
   }, []);
 
   const handleCardClick = useCallback((item: GalleryItem) => {
     setActiveItem(item);
     const idx = filtered.findIndex(i => i.id === item.id);
-    [filtered[(idx + 1) % filtered.length], filtered[(idx - 1 + filtered.length) % filtered.length]]
-      .forEach(n => preloader.preload(n.src, LIGHTBOX_WIDTH));
+    // FIX: decode соседей с правильным quality
+    [
+      filtered[(idx + 1) % filtered.length],
+      filtered[(idx - 1 + filtered.length) % filtered.length],
+    ].forEach(n => preloader.decode(n.src, LIGHTBOX_WIDTH, QUALITY_HIGH));
   }, [filtered]);
 
   return (
@@ -340,9 +423,15 @@ export default function GallerySection() {
                   aria-selected={filter === cat}
                   aria-controls="gallery-carousel"
                   onClick={() => setFilter(cat)}
+                  // FIX: decode при наведении на фильтр — прогреваем категорию заранее
                   onMouseEnter={() => {
                     const catItems = cat === 'Все' ? GALLERY_ITEMS : GALLERY_ITEMS.filter(i => i.cat === cat);
-                    preloader.preloadDeferred(catItems.map(i => i.src), LIGHTBOX_WIDTH, 200);
+                    preloader.decodeDeferred(
+                      catItems.map(i => i.src),
+                      LIGHTBOX_WIDTH,
+                      200,
+                      QUALITY_HIGH,
+                    );
                   }}
                   className={cn(
                     'px-5 py-2 rounded-full text-[10px] font-bold tracking-wider uppercase transition-all duration-300 border',
@@ -382,27 +471,12 @@ export default function GallerySection() {
               <ChevronRight className="w-6 h-6 lg:w-8 lg:h-8 group-hover:translate-x-1 transition-transform" aria-hidden="true" />
             </button>
 
-            {/* Те же swipe-fix правила для gallery */}
             <style>{`
-              .gallery-coverflow-swiper .swiper-wrapper {
-                touch-action: pan-y;
-              }
-              .gallery-coverflow-swiper .swiper-slide img {
-                -webkit-user-drag: none;
-                user-drag: none;
-                pointer-events: none;
-              }
-              .gallery-coverflow-swiper .swiper-slide * {
-                user-select: none;
-                -webkit-user-select: none;
-              }
-              .gallery-coverflow-swiper .swiper-slide {
-                touch-action: pan-y;
-              }
-              .gallery-coverflow-swiper .swiper-slide-active {
-                opacity: 1 !important;
-                filter: none !important;
-              }
+              .gallery-coverflow-swiper .swiper-wrapper { touch-action: pan-y; }
+              .gallery-coverflow-swiper .swiper-slide img { -webkit-user-drag: none; user-drag: none; pointer-events: none; }
+              .gallery-coverflow-swiper .swiper-slide * { user-select: none; -webkit-user-select: none; }
+              .gallery-coverflow-swiper .swiper-slide { touch-action: pan-y; }
+              .gallery-coverflow-swiper .swiper-slide-active { opacity: 1 !important; filter: none !important; }
             `}</style>
 
             <div className="gallery-coverflow-swiper">

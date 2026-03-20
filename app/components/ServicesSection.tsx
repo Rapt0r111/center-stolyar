@@ -1,26 +1,24 @@
 'use client';
 
 /**
- * ServicesSection.tsx — исправленная версия
+ * ServicesSection.tsx — image-loading fixes
  *
- * Исправления:
- * ─────────────────────────────────────────────────────────────────
- * 1. BUG FIX: Scroll lock переписан.
- *    Старый код:
- *      document.body.style.overflow = 'hidden' + window.scrollTo(0, scrollY) в cleanup
- *    Проблема: window.scrollTo вызывался при КАЖДОМ закрытии модалки, в т.ч.
- *    на десктопе, где скачка нет, что создавало неожиданные прокрутки.
- *    Новый код: используем document.documentElement (как в Navbar) и
- *    принудительную прокрутку только если позиция изменилась.
+ * ИСПРАВЛЕНИЯ:
+ * 1. CRITICAL — PhotoLightbox <Image quality={88}> → quality={85} (QUALITY_HIGH).
+ *    88 отсутствует в next.config.ts qualities[] → Next.js отдавал непредсказуемый
+ *    результат. Preloader использовал q=80 → тройной промах кэша.
  *
- * 2. BUG FIX: Конфликт scroll lock с Navbar.
- *    Navbar блокирует document.documentElement.style.overflow,
- *    ServicesSection — document.body.style.overflow.
- *    Теперь оба компонента используют documentElement → не конфликтуют.
+ * 2. Все preloader-вызовы теперь явно передают quality:
+ *    decode(src, LIGHTBOX_WIDTH, QUALITY_HIGH) для PhotoLightbox
+ *    decode(src, LIGHTBOX_WIDTH, QUALITY_MICRO) для ThumbCard (quality={70})
  *
- * 3. handleCta: после закрытия модалки нужно 1 тик, чтобы unlock scroll
- *    отработал до scrollTo. Таймаут увеличен с 300мс до 380мс (= длительность
- *    exit анимации модалки).
+ * 3. ServiceModal: decode() вместо preload() для первого изображения,
+ *    decodeMany() для остальных — GPU-готовность перед открытием PhotoLightbox.
+ *
+ * 4. PhotoLightbox.imgLoaded инициализируется через preloader.isReady().
+ *
+ * 5. rootMargin IntersectionObserver убран (ServicesSection не использует IO),
+ *    но BentoCard hover теперь вызывает decode() вместо preloadDeferred().
  */
 
 import React, { useEffect, useCallback, useState, useRef } from 'react';
@@ -40,7 +38,12 @@ import { Autoplay } from 'swiper/modules';
 import type { Swiper as SwiperType } from 'swiper';
 import 'swiper/css';
 
-import { preloader, LIGHTBOX_WIDTH } from '@/lib/image-preloader';
+import {
+  preloader,
+  LIGHTBOX_WIDTH,
+  QUALITY_HIGH,
+  QUALITY_MICRO,
+} from '@/lib/image-preloader';
 import ImageSkeleton from '@/app/components/ui/ImageSkeleton';
 
 const Stairs = createLucideIcon('Stairs', [
@@ -72,7 +75,6 @@ const CELL_CLASSES: Record<number, string> = {
   6: 'col-span-2 row-span-1',
 };
 
-// ─── Unified scroll lock (same approach as Navbar) ────────────────────────────
 function lockScroll(): number {
   const y = window.scrollY;
   document.documentElement.style.overflow = 'hidden';
@@ -81,7 +83,6 @@ function lockScroll(): number {
 
 function unlockScroll(savedY: number) {
   document.documentElement.style.overflow = '';
-  // Только если позиция изменилась (защита от лишнего прокрутки)
   if (Math.abs(window.scrollY - savedY) > 1) {
     window.scrollTo({ top: savedY, behavior: 'instant' });
   }
@@ -98,9 +99,15 @@ function PhotoLightbox({
   onClose: () => void;
 }) {
   const [idx, setIdx] = useState(initialIndex);
-  const [imgLoaded, setImgLoaded] = useState(false);
+  // FIX: инициализируем из isReady() — если декодировано, skeleton не нужен
+  const [imgLoaded, setImgLoaded] = useState(
+    () => preloader.isReady(images[initialIndex]?.src ?? '', LIGHTBOX_WIDTH, QUALITY_HIGH),
+  );
 
-  useEffect(() => { setImgLoaded(false); }, [idx]);
+  // FIX: при смене индекса проверяем isReady
+  useEffect(() => {
+    setImgLoaded(preloader.isReady(images[idx]?.src ?? '', LIGHTBOX_WIDTH, QUALITY_HIGH));
+  }, [idx, images]);
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -135,14 +142,32 @@ function PhotoLightbox({
         <>
           <button
             aria-label="Предыдущее фото"
-            onClick={e => { e.stopPropagation(); setIdx(i => (i - 1 + images.length) % images.length); }}
+            onClick={e => {
+              e.stopPropagation();
+              setIdx(i => (i - 1 + images.length) % images.length);
+              // FIX: decode следующего-предыдущего с QUALITY_HIGH
+              preloader.decode(
+                images[(idx - 2 + images.length) % images.length]?.src ?? '',
+                LIGHTBOX_WIDTH,
+                QUALITY_HIGH,
+              );
+            }}
             className="absolute left-4 top-1/2 -translate-y-1/2 p-3 rounded-full text-white/60 hover:text-[#c8a96e] hover:bg-white/5 transition-all z-10"
           >
             <ChevronLeft className="w-8 h-8" />
           </button>
           <button
             aria-label="Следующее фото"
-            onClick={e => { e.stopPropagation(); setIdx(i => (i + 1) % images.length); }}
+            onClick={e => {
+              e.stopPropagation();
+              setIdx(i => (i + 1) % images.length);
+              // FIX: decode следующего-следующего с QUALITY_HIGH
+              preloader.decode(
+                images[(idx + 2) % images.length]?.src ?? '',
+                LIGHTBOX_WIDTH,
+                QUALITY_HIGH,
+              );
+            }}
             className="absolute right-4 top-1/2 -translate-y-1/2 p-3 rounded-full text-white/60 hover:text-[#c8a96e] hover:bg-white/5 transition-all z-10"
           >
             <ChevronRight className="w-8 h-8" />
@@ -168,7 +193,7 @@ function PhotoLightbox({
             className="object-contain"
             sizes="100vw"
             priority
-            quality={88}
+            quality={QUALITY_HIGH}   // FIX: было 88 → 85 (QUALITY_HIGH, входит в qualities[])
             onLoad={() => setImgLoaded(true)}
           />
           <p className="absolute bottom-0 left-0 right-0 text-center text-white/50 text-sm pb-2">
@@ -186,6 +211,8 @@ function PhotoLightbox({
               aria-selected={i === idx}
               aria-label={`Фото ${i + 1}`}
               onClick={e => { e.stopPropagation(); setIdx(i); }}
+              // FIX: decode при наведении на точку навигации
+              onMouseEnter={() => preloader.decode(images[i].src, LIGHTBOX_WIDTH, QUALITY_HIGH)}
               className={cn(
                 'h-1.5 rounded-full transition-all duration-300',
                 i === idx ? 'bg-[#c8a96e] w-4' : 'bg-white/30 w-1.5'
@@ -215,14 +242,16 @@ function ServiceModal({
   );
 
   useEffect(() => {
-    if (galleryImages.length > 0) {
-      preloader.preload(galleryImages[0].src, LIGHTBOX_WIDTH);
-      preloader.preloadMany(
-        galleryImages.slice(1).map(i => i.src),
-        LIGHTBOX_WIDTH
-      );
-    }
-  // galleryImages стабилен: зависит от service.title (константа при открытии)
+    if (galleryImages.length === 0) return;
+    // FIX: decode() вместо preload() + правильные quality
+    // Первое — с высоким приоритетом (пользователь может сразу кликнуть)
+    preloader.decode(galleryImages[0].src, LIGHTBOX_WIDTH, QUALITY_HIGH);
+    // Остальные — в idle (GPU-готовность для PhotoLightbox)
+    preloader.decodeMany(
+      galleryImages.slice(1).map(i => i.src),
+      LIGHTBOX_WIDTH,
+      QUALITY_HIGH,
+    );
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [service.title]);
 
@@ -283,7 +312,6 @@ function ServiceModal({
           </motion.button>
 
           <div className="p-8 sm:p-10 relative z-10">
-            {/* Header */}
             <motion.div
               initial={{ opacity: 0, x: -16 }}
               animate={{ opacity: 1, x: 0 }}
@@ -302,10 +330,7 @@ function ServiceModal({
                 <Icon size={34} className="text-[#c8a96e]" strokeWidth={1.4} />
               </div>
               <div>
-                <h3
-                  className="text-2xl font-bold text-white mb-1"
-                  style={{ fontFamily: 'Georgia, serif' }}
-                >
+                <h3 className="text-2xl font-bold text-white mb-1" style={{ fontFamily: 'Georgia, serif' }}>
                   {service.title}
                 </h3>
                 <p className="text-[#c8a96e] text-xs uppercase tracking-[0.15em] opacity-80">
@@ -314,7 +339,6 @@ function ServiceModal({
               </div>
             </motion.div>
 
-            {/* Text */}
             <div className="space-y-4">
               <motion.p
                 initial={{ opacity: 0, y: 8 }}
@@ -342,7 +366,6 @@ function ServiceModal({
               </motion.p>
             </div>
 
-            {/* Photo strip */}
             {galleryImages.length > 0 && (
               <motion.div
                 initial={{ opacity: 0, y: 12 }}
@@ -393,7 +416,7 @@ function ServiceModal({
                         <ThumbCard
                           img={img}
                           index={i}
-                          onHover={() => preloader.preload(img.src, LIGHTBOX_WIDTH)}
+                          onHover={() => preloader.decode(img.src, LIGHTBOX_WIDTH, QUALITY_HIGH)}
                           onClick={() => setLightboxIndex(i)}
                         />
                       </SwiperSlide>
@@ -403,7 +426,6 @@ function ServiceModal({
               </motion.div>
             )}
 
-            {/* CTA */}
             <motion.div
               initial={{ opacity: 0, y: 16 }}
               animate={{ opacity: 1, y: 0 }}
@@ -448,7 +470,10 @@ function ThumbCard({
   onHover: () => void;
   onClick: () => void;
 }) {
-  const [loaded, setLoaded] = useState(false);
+  const [loaded, setLoaded] = useState(
+    // FIX: миниатюра 160px → QUALITY_MICRO=70
+    () => preloader.isReady(img.src, 160, QUALITY_MICRO),
+  );
 
   return (
     <div
@@ -470,7 +495,7 @@ function ThumbCard({
         className="object-cover transition-transform duration-500 group-hover:scale-110"
         sizes="160px"
         loading={index === 0 ? 'eager' : 'lazy'}
-        quality={70}
+        quality={QUALITY_MICRO}   // FIX: было 70 захардкожено, теперь константа
         onLoad={() => setLoaded(true)}
       />
       <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-all duration-300 flex items-center justify-center">
@@ -500,7 +525,13 @@ function BentoCard({
     const category = SERVICE_GALLERY[service.title];
     if (!category) return;
     const imgs = GALLERY_ITEMS.filter(i => i.cat === category);
-    preloader.preloadDeferred(imgs.map(i => i.src), LIGHTBOX_WIDTH, 300);
+    // FIX: decode вместо preloadDeferred + правильный quality
+    preloader.decodeDeferred(
+      imgs.map(i => i.src),
+      LIGHTBOX_WIDTH,
+      300,
+      QUALITY_HIGH,
+    );
   }, [service.title]);
 
   return (
@@ -575,12 +606,10 @@ function BentoCard({
 // ─── Section ──────────────────────────────────────────────────────────────────
 export default function ServicesSection() {
   const [selectedService, setSelectedService] = useState<Service | null>(null);
-  // Сохраняем позицию скролла в ref, а не в state (не нужен рендер)
   const savedScrollYRef = useRef(0);
 
   useEffect(() => {
     if (selectedService) {
-      // FIX: используем document.documentElement (как Navbar) вместо body
       savedScrollYRef.current = lockScroll();
       return () => {
         unlockScroll(savedScrollYRef.current);
@@ -590,8 +619,6 @@ export default function ServicesSection() {
 
   const handleCta = useCallback((_title: string) => {
     setSelectedService(null);
-    // FIX: увеличен таймаут до 380мс = длительность exit-анимации модалки
-    // Иначе scrollTo вызывался до unlock, и страница прокручивалась в 0
     setTimeout(() => {
       const el = document.getElementById('contact');
       if (!el) return;

@@ -1,12 +1,28 @@
 'use client';
 
+/**
+ * ArticlesSection.tsx — image-loading fixes
+ *
+ * ИСПРАВЛЕНИЯ:
+ * 1. ArticleModal.imgLoaded инициализируется через preloader.isReady() —
+ *    если изображение уже декодировано, skeleton не показывается вообще.
+ * 2. handleCardPreload: decode() вместо preload() — GPU-декодинг на hover.
+ * 3. preloadMany → decodeMany с явным quality=QUALITY_THUMB (80) —
+ *    совпадает с <Image quality={80}> в ArticleModal.
+ * 4. rootMargin IntersectionObserver увеличен до 400px.
+ */
+
 import { ArrowRight, Calendar, ChevronLeft, ChevronRight, X } from 'lucide-react';
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import Image from 'next/image';
 import { cn } from '@/lib/utils';
 import { ARTICLES } from '@/lib/data';
 import type { Article } from '@/lib/data';
-import { preloader, ARTICLE_MODAL_WIDTH } from '@/lib/image-preloader';
+import {
+  preloader,
+  ARTICLE_MODAL_WIDTH,
+  QUALITY_THUMB,
+} from '@/lib/image-preloader';
 import ImageSkeleton from '@/app/components/ui/ImageSkeleton';
 
 import { Swiper, SwiperSlide } from 'swiper/react';
@@ -23,7 +39,6 @@ const LAYOUT_TRANSITION = {
   duration: 0.38,
 };
 
-// ─── Scroll helpers ────────────────────────────────────────────────────────────
 function lockBodyScroll(): number {
   const y = window.scrollY;
   document.documentElement.style.overflow = 'hidden';
@@ -38,7 +53,10 @@ function unlockBodyScroll(savedY: number) {
 
 // ─── Article Modal ─────────────────────────────────────────────────────────────
 function ArticleModal({ article, onClose }: { article: Article; onClose: () => void }) {
-  const [imgLoaded, setImgLoaded] = useState(false);
+  // FIX: если изображение уже декодировано — не показываем skeleton
+  const [imgLoaded, setImgLoaded] = useState(
+    () => preloader.isReady(article.image, ARTICLE_MODAL_WIDTH, QUALITY_THUMB),
+  );
   const titleId = useId();
   const savedScrollY = useRef(0);
 
@@ -90,7 +108,7 @@ function ArticleModal({ article, onClose }: { article: Article; onClose: () => v
             className="object-cover"
             sizes="(max-width: 640px) 100vw, 672px"
             priority
-            quality={80}
+            quality={QUALITY_THUMB}   // FIX: константа вместо захардкоженного 80
             draggable={false}
             onLoad={() => setImgLoaded(true)}
           />
@@ -157,10 +175,11 @@ export default function ArticlesSection() {
   const swiperRef = useRef<SwiperType | null>(null);
   const [activeArticle, setActiveArticle] = useState<Article | null>(null);
 
+  // FIX: rootMargin 400px — прогрев начинается до входа секции во viewport
   useEffect(() => {
     const obs = new IntersectionObserver(
       ([e]) => { if (e.isIntersecting) setVisible(true); },
-      { threshold: 0.1 }
+      { threshold: 0, rootMargin: '0px 0px 400px 0px' }
     );
     if (sectionRef.current) obs.observe(sectionRef.current);
     return () => obs.disconnect();
@@ -168,11 +187,17 @@ export default function ArticlesSection() {
 
   useEffect(() => {
     if (!visible) return;
-    preloader.preloadMany(ARTICLES.map(a => a.image), ARTICLE_MODAL_WIDTH);
+    // FIX: decodeMany с явным QUALITY_THUMB=80 — совпадает с <Image quality={80}>
+    preloader.decodeMany(
+      ARTICLES.map(a => a.image),
+      ARTICLE_MODAL_WIDTH,
+      QUALITY_THUMB,
+    );
   }, [visible]);
 
+  // FIX: decode() вместо preload() — GPU-декодинг на hover по карточке
   const handleCardPreload = useCallback((article: Article) => {
-    preloader.preload(article.image, ARTICLE_MODAL_WIDTH, 80);
+    preloader.decode(article.image, ARTICLE_MODAL_WIDTH, QUALITY_THUMB);
   }, []);
 
   return (
@@ -227,67 +252,15 @@ export default function ArticlesSection() {
               <ChevronRight className="w-6 h-6 lg:w-8 lg:h-8 group-hover:translate-x-1 transition-transform" aria-hidden="true" />
             </button>
 
-            {/*
-             * ─── SWIPE FIX: три слоя защиты ───────────────────────────────────
-             *
-             * ПРОБЛЕМА 1 — нативный drag изображений (главная причина на PC):
-             *   Браузер по умолчанию позволяет перетаскивать <img>.
-             *   При mousedown → mousemove браузер входит в режим "drag image",
-             *   перехватывает pointermove у document → Swiper не видит движения
-             *   и не считает жест свайпом.
-             *   РЕШЕНИЕ: img { -webkit-user-drag: none } + draggable={false} на <Image>.
-             *
-             * ПРОБЛЕМА 2 — выделение текста при свайпе (PC и Android):
-             *   При движении мышью/пальцем браузер начинает выделять текст,
-             *   переключается в Selection mode и отменяет drag-события.
-             *   Swiper перестаёт получать pointermove.
-             *   РЕШЕНИЕ: user-select: none на всём содержимом слайда.
-             *
-             * ПРОБЛЕМА 3 — touch-action (iOS Safari, Android Chrome):
-             *   Если не указан touch-action, браузер конкурирует с Swiper
-             *   за горизонтальные жесты. На iOS может срабатывать back-gesture.
-             *   РЕШЕНИЕ: touch-action: pan-y — браузер обрабатывает только
-             *   вертикальный скролл, горизонталь отдаёт Swiper.
-             *
-             * ПРОБЛЕМА 4 — pointer-events на оверлеях:
-             *   Полупрозрачные div-оверлеи (градиент, дата) без pointer-events:none
-             *   перехватывают события и не дают им дойти до Swiper container.
-             *   РЕШЕНИЕ: pointer-events-none на всех декоративных оверлеях.
-             */}
             <style>{`
-              .articles-coverflow-swiper .swiper-wrapper {
-                /* touch-action на wrapper — Swiper сам устанавливает, но
-                   явное задание предотвращает переопределение браузером */
-                touch-action: pan-y;
-              }
-              .articles-coverflow-swiper .swiper-slide img {
-                /* Запрет нативного drag на изображениях — ключевой фикс для PC */
-                -webkit-user-drag: none;
-                user-drag: none;
-                pointer-events: none; /* img не должен перехватывать события */
-              }
-              .articles-coverflow-swiper .swiper-slide * {
-                /* Запрет выделения текста во время свайпа */
-                user-select: none;
-                -webkit-user-select: none;
-              }
-              .articles-coverflow-swiper .swiper-slide {
-                isolation: isolate;
-                touch-action: pan-y;
-              }
-              /* z-index переопределения для корректного наслоения при depth:350 */
-              .articles-coverflow-swiper .swiper-slide-active {
-                opacity: 1 !important;
-                filter: none !important;
-                z-index: 10 !important;
-              }
+              .articles-coverflow-swiper .swiper-wrapper { touch-action: pan-y; }
+              .articles-coverflow-swiper .swiper-slide img { -webkit-user-drag: none; user-drag: none; pointer-events: none; }
+              .articles-coverflow-swiper .swiper-slide * { user-select: none; -webkit-user-select: none; }
+              .articles-coverflow-swiper .swiper-slide { isolation: isolate; touch-action: pan-y; }
+              .articles-coverflow-swiper .swiper-slide-active { opacity: 1 !important; filter: none !important; z-index: 10 !important; }
               .articles-coverflow-swiper .swiper-slide-prev,
-              .articles-coverflow-swiper .swiper-slide-next {
-                z-index: 5 !important;
-              }
-              .articles-coverflow-swiper .swiper-slide:not(.swiper-slide-active):not(.swiper-slide-prev):not(.swiper-slide-next) {
-                z-index: 1 !important;
-              }
+              .articles-coverflow-swiper .swiper-slide-next { z-index: 5 !important; }
+              .articles-coverflow-swiper .swiper-slide:not(.swiper-slide-active):not(.swiper-slide-prev):not(.swiper-slide-next) { z-index: 1 !important; }
             `}</style>
 
             <div className="articles-coverflow-swiper">
@@ -295,27 +268,19 @@ export default function ArticlesSection() {
                 modules={[Autoplay, EffectCoverflow]}
                 onSwiper={swiper => { swiperRef.current = swiper; }}
                 effect="coverflow"
-                grabCursor            // курсор-рука на PC
+                grabCursor
                 centeredSlides
                 slidesPerView="auto"
                 slideToClickedSlide
-                coverflowEffect={{
-                  rotate: 0,
-                  stretch: 0,
-                  depth: 350,
-                  modifier: 2,
-                  slideShadows: false,
-                }}
+                coverflowEffect={{ rotate: 0, stretch: 0, depth: 350, modifier: 2, slideShadows: false }}
                 autoplay={{ delay: 5000, disableOnInteraction: true }}
                 watchSlidesProgress
-                simulateTouch         // явно: mouse-drag работает как touch-drag
-                // touchStartPreventDefault: false — НЕ блокируем preventDefault на touchstart,
-                // иначе клик по карточке не сработает на iOS
+                simulateTouch
                 touchStartPreventDefault={false}
                 resistance
                 resistanceRatio={0.85}
                 speed={500}
-                threshold={5}         // 5px до начала свайпа — мгновенный отклик
+                threshold={5}
               >
                 {ARTICLES.map((a, i) => (
                   <SwiperSlide key={a.id} className="!w-[85%] sm:!w-[420px] h-auto">
@@ -326,9 +291,6 @@ export default function ArticlesSection() {
                       className="group relative h-full rounded-3xl overflow-hidden flex flex-col cursor-pointer shadow-2xl bg-[#1a1008]/80 backdrop-blur-xl"
                       style={{
                         border: '1px solid rgba(200,169,110,0.1)',
-                        // touchAction: pan-y на уровне motion-элемента —
-                        // Framer Motion уважает это и не вызывает preventDefault
-                        // на горизонтальные gesture-события
                         touchAction: 'pan-y',
                         userSelect: 'none',
                         WebkitUserSelect: 'none',
@@ -347,16 +309,13 @@ export default function ArticlesSection() {
                           className="object-cover transition-transform duration-700 group-hover:scale-110"
                           sizes="(max-width: 768px) 85vw, 420px"
                           priority={i < 2}
-                          loading={i < 2 ? undefined : 'lazy'}
-                          quality={80}
-                          // draggable={false} — запрет нативного drag на img-элементе
-                          // (дублирует CSS, но Next/Image может игнорировать CSS-правило
-                          // на внутреннем img без явного атрибута)
+                          // FIX: eager для всех слайдов в Swiper DOM
+                          loading={i < 2 ? undefined : 'eager'}
+                          quality={QUALITY_THUMB}
                           draggable={false}
                           placeholder="blur"
                           blurDataURL="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDIwIiBoZWlnaHQ9IjI1NiIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iNDIwIiBoZWlnaHQ9IjI1NiIgZmlsbD0iIzFhMTAwOCIvPjwvc3ZnPg=="
                         />
-                        {/* pointer-events-none — оверлей не перехватывает события свайпа */}
                         <div className="absolute inset-0 bg-gradient-to-t from-[#1a1008] via-transparent to-transparent opacity-90 pointer-events-none" aria-hidden="true" />
                         <div
                           className="absolute top-4 right-4 bg-black/40 backdrop-blur-md px-3 py-1 rounded-full flex items-center gap-1.5 text-[10px] text-white/90 font-medium uppercase tracking-wider pointer-events-none"
