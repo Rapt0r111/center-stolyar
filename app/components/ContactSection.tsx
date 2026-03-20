@@ -90,7 +90,7 @@ function SuccessView({ onReset }: { onReset: () => void }) {
         className="w-16 h-16 rounded-full flex items-center justify-center mb-4"
         style={{ background: 'rgba(200,169,110,0.12)', border: '1px solid rgba(200,169,110,0.3)' }}
       >
-        <CheckCircle className="w-8 h-8 text-[#c8a96e]" aria-hidden="true" />
+        <CheckCircle className="w-8 h-8 text-gold" aria-hidden="true" />
       </div>
       <h3 className="text-white text-xl font-semibold mb-2">Заявка отправлена!</h3>
       <p className="text-white/45 text-sm mb-6 max-w-xs">
@@ -98,7 +98,7 @@ function SuccessView({ onReset }: { onReset: () => void }) {
       </p>
       <button
         onClick={onReset}
-        className="px-6 py-2.5 rounded-xl text-[#c8a96e] text-sm transition-colors hover:bg-white/10"
+        className="px-6 py-2.5 rounded-xl text-gold text-sm transition-colors hover:bg-white/10"
         style={{ background: 'rgba(200,169,110,0.1)', border: '1px solid rgba(200,169,110,0.25)' }}
       >
         Отправить ещё одну
@@ -126,7 +126,7 @@ export default function ContactSection() {
   const { errors, serverError, values } = state;
 
   return (
-    <section id="contact" className="py-16 lg:py-20 bg-[#f5f0e8] relative overflow-hidden">
+    <section id="contact" className="py-16 lg:py-20 bg-cream relative overflow-hidden">
       <div
         className="absolute top-0 right-0 w-80 h-80 opacity-10 pointer-events-none"
         style={{ background: 'radial-gradient(circle, #c8a96e, transparent 70%)' }}
@@ -136,8 +136,8 @@ export default function ContactSection() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* Section label */}
         <div className="flex items-center gap-4 mb-4">
-          <div className="w-12 h-px bg-[#c8a96e]" aria-hidden="true" />
-          <span className="text-[#c8a96e] text-xs tracking-widest uppercase font-medium">Связь с нами</span>
+          <div className="w-12 h-px bg-gold" aria-hidden="true" />
+          <span className="text-gold text-xs tracking-widest uppercase font-medium">Связь с нами</span>
         </div>
 
         <div className="grid lg:grid-cols-2 gap-12 lg:gap-20 items-start">
@@ -145,12 +145,12 @@ export default function ContactSection() {
           {/* ── Left: info ──────────────────────────────────────────────── */}
           <div>
             <h2
-              className="text-4xl lg:text-5xl font-bold text-[#1a1008] leading-tight mb-6"
+              className="text-4xl lg:text-5xl font-bold text-wood-dark leading-tight mb-6"
               style={{ fontFamily: 'Georgia, serif' }}
             >
-              Оставьте <span className="text-[#c8a96e]">заявку</span>
+              Оставьте <span className="text-gold">заявку</span>
             </h2>
-            <p className="text-[#3d2b1f]/65 leading-relaxed mb-10">
+            <p className="text-wood-mid/65 leading-relaxed mb-10">
               Расскажите нам о вашем проекте. Мы перезвоним в течение 30 минут и
               подготовим предварительный расчёт стоимости бесплатно.
             </p>

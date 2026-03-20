@@ -21,9 +21,9 @@
 import type { Metadata, Viewport } from 'next';
 import { Geist, Geist_Mono } from 'next/font/google';
 import './globals.css';
-import { Analytics }     from '@vercel/analytics/next';
+import { Analytics } from '@vercel/analytics/next';
 import { SpeedInsights } from '@vercel/speed-insights/next';
-import StructuredData    from '@/app/components/seo/StructuredData';
+import StructuredData from '@/app/components/seo/StructuredData';
 
 // next/font/google — шрифты самохостируются при сборке.
 // НЕТ запросов к fonts.googleapis.com в браузере → preconnect не нужен.
@@ -41,7 +41,7 @@ const geistMono = Geist_Mono({
   preload: false,
 });
 
-const SITE_URL  = 'https://www.centersi.spb.ru';
+const SITE_URL = 'https://www.centersi.spb.ru';
 const SITE_NAME = 'Центр Столярных Изделий';
 
 export const viewport: Viewport = {
@@ -86,8 +86,8 @@ export const metadata: Metadata = {
     'centersi spb',
   ],
 
-  authors:   [{ name: SITE_NAME, url: SITE_URL }],
-  creator:   SITE_NAME,
+  authors: [{ name: SITE_NAME, url: SITE_URL }],
+  creator: SITE_NAME,
   publisher: SITE_NAME,
 
   alternates: {
@@ -144,11 +144,11 @@ export const metadata: Metadata = {
 
   icons: {
     icon: [
-      { url: '/favicon.ico',       sizes: 'any' },
-      { url: '/favicon-16x16.png', sizes: '16x16',  type: 'image/png' },
-      { url: '/favicon-32x32.png', sizes: '32x32',  type: 'image/png' },
-      { url: '/icon-192.png',      sizes: '192x192', type: 'image/png' },
-      { url: '/icon-512.png',      sizes: '512x512', type: 'image/png' },
+      { url: '/favicon.ico', sizes: 'any' },
+      { url: '/favicon-16x16.png', sizes: '16x16', type: 'image/png' },
+      { url: '/favicon-32x32.png', sizes: '32x32', type: 'image/png' },
+      { url: '/icon-192.png', sizes: '192x192', type: 'image/png' },
+      { url: '/icon-512.png', sizes: '512x512', type: 'image/png' },
     ],
     apple: [{ url: '/apple-touch-icon.png', sizes: '180x180', type: 'image/png' }],
     shortcut: '/favicon.ico',
@@ -172,19 +172,18 @@ export const metadata: Metadata = {
   // Вместо ручного <head> тега — правильный способ для Next.js App Router
   other: {
     // Geo-теги — критично для локального SEO Санкт-Петербург
-    'geo.region':    'RU-SPE',
+    'geo.region': 'RU-SPE',
     'geo.placename': 'Санкт-Петербург',
-    'geo.position':  '59.965347;30.471668',
-    'ICBM':          '59.965347, 30.471668',
+    'geo.position': '59.965347;30.471668',
+    'ICBM': '59.965347, 30.471668',
     // Яндекс.Браузер виджет
     'yandex-tableau-widget': `logo=${SITE_URL}/images/logo-black.png, color=#1a1008`,
   },
 
-  // Верификация поисковиков — раскомментировать после регистрации:
-  // verification: {
-  //   google: 'GOOGLE_SEARCH_CONSOLE_CODE',
-  //   yandex: 'YANDEX_WEBMASTER_CODE',
-  // },
+  verification: {
+    // google: 'GOOGLE_CODE', // раскомментировать позже
+    yandex: 'dee44e0bdffd8404',
+  },
 
   category: 'business',
 };
