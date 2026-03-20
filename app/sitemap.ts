@@ -1,4 +1,20 @@
 // app/sitemap.ts
+// ─── ИСПРАВЛЕНО: якорные URL (#fragment) в sitemap ───────────────────────────
+//
+// БАГ: В предыдущей версии sitemap содержал URL вида:
+//   https://www.centersi.spb.ru/#services
+//   https://www.centersi.spb.ru/#gallery
+//   ...и т.д.
+//
+// Google ИГНОРИРУЕТ hash-фрагменты — все эти URL воспринимались как
+// https://www.centersi.spb.ru/ → 5 дублирующих записей для одной страницы.
+// Это не помогало SEO и засоряло sitemap.
+//
+// ПРАВИЛО: В sitemap должны быть только канонические URL, которые
+// возвращают 200 и содержат уникальный контент.
+//
+// ИТОГ: Один URL главной страницы со всеми изображениями.
+
 import type { MetadataRoute } from 'next';
 import { ARTICLES, GALLERY_ITEMS } from '@/lib/data';
 
@@ -7,58 +23,25 @@ const BASE_URL = 'https://www.centersi.spb.ru';
 export default function sitemap(): MetadataRoute.Sitemap {
   const now = new Date();
 
-  const galleryImageUrls = GALLERY_ITEMS.map(
-    item => `${BASE_URL}${item.src}`
-  );
-  const articleImageUrls = ARTICLES.map(
-    article => `${BASE_URL}${article.image}`
-  );
+  // Все изображения для Image Sitemap (Next.js 16)
+  // Google индексирует их отдельно в Google Images
+  const galleryImageUrls = GALLERY_ITEMS.map(item => `${BASE_URL}${item.src}`);
+  const articleImageUrls = ARTICLES.map(article => `${BASE_URL}${article.image}`);
 
   return [
-    // Главная — максимальный приоритет, все изображения
     {
+      // Единственная реальная страница — главная
       url: BASE_URL,
       lastModified: now,
       changeFrequency: 'weekly',
       priority: 1.0,
+      // Все изображения сайта — индексируются Google Images
       images: [
         `${BASE_URL}/images/og-image.jpg`,
+        `${BASE_URL}/images/logo-black.png`,
         ...galleryImageUrls,
         ...articleImageUrls,
       ],
-    },
-    // Якорные секции
-    {
-      url: `${BASE_URL}/#about`,
-      lastModified: now,
-      changeFrequency: 'monthly',
-      priority: 0.6,
-    },
-    {
-      url: `${BASE_URL}/#services`,
-      lastModified: now,
-      changeFrequency: 'monthly',
-      priority: 0.9,
-    },
-    {
-      url: `${BASE_URL}/#gallery`,
-      lastModified: now,
-      changeFrequency: 'monthly',
-      priority: 0.8,
-      images: galleryImageUrls,
-    },
-    {
-      url: `${BASE_URL}/#articles`,
-      lastModified: new Date('2026-01-15'),
-      changeFrequency: 'monthly',
-      priority: 0.7,
-      images: articleImageUrls,
-    },
-    {
-      url: `${BASE_URL}/#contact`,
-      lastModified: now,
-      changeFrequency: 'monthly',
-      priority: 0.8,
     },
   ];
 }

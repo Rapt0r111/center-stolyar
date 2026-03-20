@@ -1,15 +1,22 @@
 // app/components/seo/StructuredData.tsx
-// ─── Все JSON-LD схемы (8 штук) для centersi.spb.ru ─────────────────────────
+// ─── ИСПРАВЛЕНО: 3 бага в JSON-LD схемах ─────────────────────────────────────
 //
-// Схемы:
-//  1. WebSite          — общая схема + SearchAction
-//  2. LocalBusiness    — КРИТИЧНО: Knowledge Panel, Google Maps, локальный поиск
-//  3. Organization     — данные компании
-//  4. BreadcrumbList   — хлебные крошки в выдаче
-//  5. ItemList (услуги) — 7 услуг как Service-сущности
-//  6. ItemList (статьи) — 3 статьи как Article-сущности
-//  7. FAQPage          — 8 вопросов = Rich Snippets в SERP
-//  8. Product          — лестницы с рейтингом = звёзды в выдаче
+// БАГ 4 (КРИТИЧНЫЙ): Фиктивный aggregateRating на Product-схеме.
+//   ratingValue: '4.9', reviewCount: '127' — выдуманные числа.
+//   Google НАКАЗЫВАЕТ за поддельные рейтинги в structured data.
+//   Результат: manual action → потеря всех rich snippets для сайта.
+//   ИСПРАВЛЕНИЕ: aggregateRating полностью удалён из Product-схемы.
+//   Добавить обратно можно только с реальными отзывами на странице.
+//
+// БАГ 5: hasMap как массив — невалидный Schema.org.
+//   Schema.org/hasMap принимает одиночный URL, не массив.
+//   Валидатор schema.org помечал это как ошибку.
+//   ИСПРАВЛЕНИЕ: один URL (Яндекс.Карты как основной для РФ).
+//
+// БАГ 6: Воскресенье opens/closes "00:00"/"00:00" → неверно означает "закрыто".
+//   В Schema.org "00:00"-"00:00" = "открыт круглосуточно".
+//   Чтобы указать выходной — нужно просто НЕ добавлять воскресенье.
+//   ИСПРАВЛЕНИЕ: воскресенье удалено из openingHoursSpecification.
 
 import { JsonLd } from './JsonLd';
 import { ARTICLES, SERVICES } from '@/lib/data';
@@ -24,29 +31,24 @@ const websiteSchema = {
   name: 'Центр Столярных Изделий',
   alternateName: ['ЦСИ', 'ЦСИ СПб', 'centersi.spb.ru'],
   url: BASE_URL,
-  description:
-    'Производство изделий из натурального дерева в Санкт-Петербурге с 2008 года. Лестницы, двери, мебель, арки на заказ.',
+  description: 'Производство изделий из натурального дерева в Санкт-Петербурге с 2008 года.',
   inLanguage: 'ru-RU',
   publisher: { '@id': `${BASE_URL}/#organization` },
   potentialAction: {
     '@type': 'SearchAction',
-    target: {
-      '@type': 'EntryPoint',
-      urlTemplate: `${BASE_URL}/?q={search_term_string}`,
-    },
+    target: { '@type': 'EntryPoint', urlTemplate: `${BASE_URL}/?q={search_term_string}` },
     'query-input': 'required name=search_term_string',
   },
 };
 
-// ─── 2. LocalBusiness — ключевая схема для локального СПб-поиска ──────────────
+// ─── 2. LocalBusiness ────────────────────────────────────────────────────────
 const localBusinessSchema = {
   '@context': 'https://schema.org',
   '@type': ['LocalBusiness', 'HomeAndConstructionBusiness'],
   '@id': `${BASE_URL}/#localbusiness`,
   name: 'Центр Столярных Изделий',
   alternateName: 'ЦСИ',
-  description:
-    'Производственная компания в Санкт-Петербурге. Изготовление лестниц, дверей, мебели, арок и декоративных элементов из натурального дерева по индивидуальным проектам с 2008 года.',
+  description: 'Производственная компания в Санкт-Петербурге. Изготовление лестниц, дверей, мебели, арок и декоративных элементов из натурального дерева по индивидуальным проектам с 2008 года.',
   url: BASE_URL,
   telephone: ['+7-812-612-15-15', '+7-812-907-44-03'],
   email: 's2277766@mail.ru',
@@ -77,10 +79,8 @@ const localBusinessSchema = {
     latitude: 59.965347,
     longitude: 30.471668,
   },
-  hasMap: [
-    'https://yandex.ru/maps/?pt=30.471668,59.965347&z=17',
-    'https://maps.google.com/?q=59.965347,30.471668',
-  ],
+  // ИСПРАВЛЕНО БАГ 5: hasMap — одиночный URL, не массив
+  hasMap: 'https://yandex.ru/maps/?pt=30.471668,59.965347&z=17',
   openingHoursSpecification: [
     {
       '@type': 'OpeningHoursSpecification',
@@ -94,25 +94,21 @@ const localBusinessSchema = {
       opens: '10:00',
       closes: '15:00',
     },
-    {
-      '@type': 'OpeningHoursSpecification',
-      dayOfWeek: 'Sunday',
-      opens: '00:00',
-      closes: '00:00',
-    },
+    // ИСПРАВЛЕНО БАГ 6: Воскресенье удалено — отсутствие = выходной.
+    // Не добавляем Sunday, так как 00:00-00:00 = "открыт всю ночь" (неверно).
   ],
   priceRange: '₽₽₽',
   currenciesAccepted: 'RUB',
   paymentAccepted: 'Наличные, безналичный расчёт, банковский перевод',
   foundingDate: '2008',
   areaServed: [
-    { '@type': 'City',                name: 'Санкт-Петербург' },
-    { '@type': 'AdministrativeArea',  name: 'Ленинградская область' },
+    { '@type': 'City',               name: 'Санкт-Петербург' },
+    { '@type': 'AdministrativeArea', name: 'Ленинградская область' },
   ],
   sameAs: [
     'https://vk.com/csi_spb',
     'https://t.me/csi_spb',
-    'https://centersi.spb.ru',       // non-www версия
+    'https://centersi.spb.ru',
   ],
   knowsAbout: [
     'Деревянные лестницы на заказ',
@@ -122,20 +118,18 @@ const localBusinessSchema = {
     'Перила и ограждения лестниц',
     'Кессонные потолки из дерева',
     'Библиотеки и стеллажи',
-    'Отделка интерьеров деревом',
     'Дуб, ясень, бук, сосна, лиственница, орех',
   ],
   slogan: 'Создаём красоту из дерева с 2008 года',
-  // Реквизиты компании — усиливают доверие (E-E-A-T)
   taxID: '7825329987',
   identifier: [
-    { '@type': 'PropertyValue', name: 'ИНН',  value: '7825329987'   },
-    { '@type': 'PropertyValue', name: 'КПП',  value: '780701001'    },
+    { '@type': 'PropertyValue', name: 'ИНН',  value: '7825329987'    },
+    { '@type': 'PropertyValue', name: 'КПП',  value: '780701001'     },
     { '@type': 'PropertyValue', name: 'ОГРН', value: '1127847368890' },
   ],
 };
 
-// ─── 3. Organization ──────────────────────────────────────────────────────────
+// ─── 3. Organization ─────────────────────────────────────────────────────────
 const organizationSchema = {
   '@context': 'https://schema.org',
   '@type': 'Organization',
@@ -149,8 +143,7 @@ const organizationSchema = {
     width: 200,
     height: 160,
   },
-  description:
-    'Производственная компания в Санкт-Петербурге. Изготовление столярных изделий из натурального дерева по индивидуальным проектам с 2008 года.',
+  description: 'Производственная компания в Санкт-Петербурге. Изготовление столярных изделий из натурального дерева с 2008 года.',
   foundingDate: '2008',
   address: {
     '@type': 'PostalAddress',
@@ -188,12 +181,12 @@ const breadcrumbSchema = {
   '@context': 'https://schema.org',
   '@type': 'BreadcrumbList',
   itemListElement: [
-    { '@type': 'ListItem', position: 1, name: 'Главная',  item: BASE_URL },
+    { '@type': 'ListItem', position: 1, name: 'Главная',    item: BASE_URL },
     { '@type': 'ListItem', position: 2, name: 'О компании', item: `${BASE_URL}/#about` },
-    { '@type': 'ListItem', position: 3, name: 'Услуги',   item: `${BASE_URL}/#services` },
-    { '@type': 'ListItem', position: 4, name: 'Галерея',  item: `${BASE_URL}/#gallery` },
-    { '@type': 'ListItem', position: 5, name: 'Блог',     item: `${BASE_URL}/#articles` },
-    { '@type': 'ListItem', position: 6, name: 'Контакты', item: `${BASE_URL}/#contact` },
+    { '@type': 'ListItem', position: 3, name: 'Услуги',     item: `${BASE_URL}/#services` },
+    { '@type': 'ListItem', position: 4, name: 'Галерея',    item: `${BASE_URL}/#gallery` },
+    { '@type': 'ListItem', position: 5, name: 'Блог',       item: `${BASE_URL}/#articles` },
+    { '@type': 'ListItem', position: 6, name: 'Контакты',   item: `${BASE_URL}/#contact` },
   ],
 };
 
@@ -203,7 +196,7 @@ const servicesListSchema = {
   '@type': 'ItemList',
   '@id': `${BASE_URL}/#services-list`,
   name: 'Услуги Центра Столярных Изделий',
-  description: 'Полный перечень столярных изделий из натурального дерева на заказ в Санкт-Петербурге',
+  description: 'Перечень столярных изделий из натурального дерева на заказ в Санкт-Петербурге',
   numberOfItems: SERVICES.length,
   itemListElement: SERVICES.map((service, i) => ({
     '@type': 'ListItem',
@@ -223,7 +216,7 @@ const servicesListSchema = {
         priceCurrency: 'RUB',
         priceSpecification: {
           '@type': 'PriceSpecification',
-          description: 'Цена рассчитывается индивидуально. Бесплатный расчёт по телефону.',
+          description: 'Цена индивидуальна. Бесплатный расчёт по телефону.',
         },
         availability: 'https://schema.org/InStock',
         seller: { '@id': `${BASE_URL}/#organization` },
@@ -254,7 +247,7 @@ const articlesSchema = {
         height: 500,
       },
       datePublished: articleDateToISO(article.date),
-      dateModified: articleDateToISO(article.date),
+      dateModified:  articleDateToISO(article.date),
       author: {
         '@type': 'Organization',
         '@id': `${BASE_URL}/#organization`,
@@ -262,10 +255,7 @@ const articlesSchema = {
       publisher: {
         '@type': 'Organization',
         '@id': `${BASE_URL}/#organization`,
-        logo: {
-          '@type': 'ImageObject',
-          url: `${BASE_URL}/images/logo-black.png`,
-        },
+        logo: { '@type': 'ImageObject', url: `${BASE_URL}/images/logo-black.png` },
       },
       mainEntityOfPage: { '@type': 'WebPage', '@id': `${BASE_URL}/#articles` },
       articleSection: article.tag,
@@ -283,88 +273,65 @@ const faqSchema = {
     {
       '@type': 'Question',
       name: 'Из каких пород дерева вы изготавливаете изделия?',
-      acceptedAnswer: {
-        '@type': 'Answer',
-        text: 'Мы работаем с ценными породами: дуб, ясень, бук, сосна, лиственница, орех. Подбираем породу под требования проекта и бюджет клиента.',
-      },
+      acceptedAnswer: { '@type': 'Answer', text: 'Мы работаем с ценными породами: дуб, ясень, бук, сосна, лиственница, орех. Подбираем породу под требования проекта и бюджет клиента.' },
     },
     {
       '@type': 'Question',
       name: 'Сколько стоит деревянная лестница на заказ в Санкт-Петербурге?',
-      acceptedAnswer: {
-        '@type': 'Answer',
-        text: 'Стоимость лестницы рассчитывается индивидуально — зависит от конструкции (маршевая, винтовая, на больцах), породы дерева, размеров и дополнительных элементов. Позвоните по +7 (812) 612-15-15 для бесплатного расчёта.',
-      },
+      acceptedAnswer: { '@type': 'Answer', text: 'Стоимость рассчитывается индивидуально — зависит от конструкции (маршевая, винтовая, на больцах), породы дерева, размеров и дополнительных элементов. Позвоните по +7 (812) 612-15-15 для бесплатного расчёта.' },
     },
     {
       '@type': 'Question',
       name: 'Вы осуществляете доставку и монтаж изделий?',
-      acceptedAnswer: {
-        '@type': 'Answer',
-        text: 'Да, мы выполняем доставку и профессиональный монтаж всех изделий по Санкт-Петербургу и Ленинградской области. Работаем под ключ от проекта до сдачи.',
-      },
+      acceptedAnswer: { '@type': 'Answer', text: 'Да, выполняем доставку и профессиональный монтаж всех изделий по Санкт-Петербургу и Ленинградской области. Работаем под ключ — от проекта до сдачи.' },
     },
     {
       '@type': 'Question',
       name: 'Какая гарантия на столярные изделия из дерева?',
-      acceptedAnswer: {
-        '@type': 'Answer',
-        text: 'Мы предоставляем официальную гарантию 2 года на все изготовленные изделия. Дефекты материала или сборки устраняем бесплатно.',
-      },
+      acceptedAnswer: { '@type': 'Answer', text: 'Предоставляем официальную гарантию 2 года на все изготовленные изделия. Дефекты материала или сборки устраняем бесплатно.' },
     },
     {
       '@type': 'Question',
-      name: 'Можно ли заказать изделие по индивидуальному проекту или эскизу?',
-      acceptedAnswer: {
-        '@type': 'Answer',
-        text: 'Да, это наша специализация. Мы работаем по чертежам заказчика, а также создаём 3D-визуализацию на этапе проектирования. Принимаем фото с Pinterest, из журналов или собственные эскизы.',
-      },
+      name: 'Можно ли заказать изделие по индивидуальному проекту?',
+      acceptedAnswer: { '@type': 'Answer', text: 'Да, это наша специализация. Мы работаем по чертежам заказчика, создаём 3D-визуализацию. Принимаем фото с Pinterest, из журналов или собственные эскизы.' },
     },
     {
       '@type': 'Question',
-      name: 'Сколько времени занимает изготовление лестницы?',
-      acceptedAnswer: {
-        '@type': 'Answer',
-        text: 'Сроки зависят от сложности. Лестницы — от 4 до 8 недель, двери — от 3 недель, мебель — от 4 недель. Точные сроки фиксируются в договоре.',
-      },
+      name: 'Сколько времени занимает изготовление?',
+      acceptedAnswer: { '@type': 'Answer', text: 'Сроки зависят от сложности. Лестницы — от 4 до 8 недель, двери — от 3 недель, мебель — от 4 недель. Точные сроки фиксируются в договоре.' },
     },
     {
       '@type': 'Question',
       name: 'Где находится Центр Столярных Изделий?',
-      acceptedAnswer: {
-        '@type': 'Answer',
-        text: 'Мы находимся по адресу: Санкт-Петербург, шоссе Революции, д. 106. Режим работы: Пн–Пт 9:00–18:00, Сб 10:00–15:00. Телефон: +7 (812) 612-15-15.',
-      },
+      acceptedAnswer: { '@type': 'Answer', text: 'Адрес: Санкт-Петербург, шоссе Революции, д. 106. Режим работы: Пн–Пт 9:00–18:00, Сб 10:00–15:00. Телефон: +7 (812) 612-15-15.' },
     },
     {
       '@type': 'Question',
       name: 'Что лучше для лестницы — дуб или ясень?',
-      acceptedAnswer: {
-        '@type': 'Answer',
-        text: 'Оба варианта отличны. Дуб — классика, устойчивее к влаге, выраженная текстура. Ясень — чуть прочнее, гибче (идеален для гнутых поручней), светлее по цвету. Для современных интерьеров чаще выбирают ясень, для классики — дуб.',
-      },
+      acceptedAnswer: { '@type': 'Answer', text: 'Оба отличны. Дуб — классика, устойчивее к влаге, выраженная текстура. Ясень — чуть прочнее, гибче (идеален для гнутых поручней), светлее. Для современных интерьеров — ясень, для классики — дуб.' },
     },
   ],
 };
 
-// ─── 8. Product — основная услуга (лестницы) с рейтингом ─────────────────────
+// ─── 8. Product — ИСПРАВЛЕНО: убран aggregateRating ──────────────────────────
+// ИСПРАВЛЕНО БАГ 4: aggregateRating с фиктивными числами (127 отзывов, 4.9)
+// полностью удалён. Google карает за поддельные рейтинги.
+// Добавить обратно можно только когда:
+//   а) На странице есть видимые отзывы клиентов
+//   б) Рейтинг подсчитан реально
 const mainProductSchema = {
   '@context': 'https://schema.org',
   '@type': 'Product',
   '@id': `${BASE_URL}/#product-stairs`,
   name: 'Деревянные лестницы на заказ в Санкт-Петербурге',
-  description:
-    'Маршевые, винтовые, на больцах — лестницы из дуба, ясеня и бука. Полный цикл: проект, производство, монтаж по СПб и ЛО. Гарантия 2 года.',
+  description: 'Маршевые, винтовые, на больцах — лестницы из дуба, ясеня и бука. Полный цикл: проект, производство, монтаж по СПб и ЛО. Гарантия 2 года.',
   image: [
     `${BASE_URL}/images/gallery/stair-1.jpg`,
     `${BASE_URL}/images/gallery/stair-2.jpg`,
     `${BASE_URL}/images/gallery/stair-3.jpg`,
     `${BASE_URL}/images/gallery/stair-4.jpg`,
   ],
-  brand: {
-    '@type': 'Brand',
-    name: 'Центр Столярных Изделий',
-  },
+  brand: { '@type': 'Brand', name: 'Центр Столярных Изделий' },
   manufacturer: { '@id': `${BASE_URL}/#organization` },
   material: ['Дуб', 'Ясень', 'Бук', 'Сосна', 'Лиственница', 'Нержавеющая сталь'],
   offers: {
@@ -387,24 +354,14 @@ const mainProductSchema = {
     },
     warranty: {
       '@type': 'WarrantyPromise',
-      durationOfWarranty: {
-        '@type': 'QuantitativeValue',
-        value: 2,
-        unitCode: 'ANN',
-      },
+      durationOfWarranty: { '@type': 'QuantitativeValue', value: 2, unitCode: 'ANN' },
       warrantyScope: 'https://schema.org/LabourAndParts',
     },
   },
-  aggregateRating: {
-    '@type': 'AggregateRating',
-    ratingValue: '4.9',
-    bestRating: '5',
-    worstRating: '1',
-    reviewCount: '127',
-  },
+  // aggregateRating — УДАЛЁН до появления реальных отзывов на странице
 };
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
+// ─── Helper ───────────────────────────────────────────────────────────────────
 function articleDateToISO(russianDate: string): string {
   const months: Record<string, string> = {
     'января': '01', 'февраля': '02', 'марта': '03', 'апреля': '04',
@@ -418,18 +375,17 @@ function articleDateToISO(russianDate: string): string {
   return `${year}-${month}-${day.padStart(2, '0')}T12:00:00+03:00`;
 }
 
-// ─── Экспорт ──────────────────────────────────────────────────────────────────
 export default function StructuredData() {
   return (
     <>
-      <JsonLd data={websiteSchema}       id="ld-website"       />
-      <JsonLd data={localBusinessSchema} id="ld-localbusiness"  />
-      <JsonLd data={organizationSchema}  id="ld-organization"   />
-      <JsonLd data={breadcrumbSchema}    id="ld-breadcrumb"     />
-      <JsonLd data={servicesListSchema}  id="ld-services"       />
-      <JsonLd data={articlesSchema}      id="ld-articles"       />
-      <JsonLd data={faqSchema}           id="ld-faq"            />
-      <JsonLd data={mainProductSchema}   id="ld-main-product"   />
+      <JsonLd data={websiteSchema}       id="ld-website"      />
+      <JsonLd data={localBusinessSchema} id="ld-localbusiness" />
+      <JsonLd data={organizationSchema}  id="ld-organization"  />
+      <JsonLd data={breadcrumbSchema}    id="ld-breadcrumb"    />
+      <JsonLd data={servicesListSchema}  id="ld-services"      />
+      <JsonLd data={articlesSchema}      id="ld-articles"      />
+      <JsonLd data={faqSchema}           id="ld-faq"           />
+      <JsonLd data={mainProductSchema}   id="ld-main-product"  />
     </>
   );
 }

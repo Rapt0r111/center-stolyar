@@ -1,6 +1,25 @@
-'use client';
+// app/page.tsx
+// ─── Server Component — убран 'use client' ───────────────────────────────────
+//
+// БАГ (КРИТИЧНЫЙ): Предыдущая версия имела 'use client' из-за useCallback.
+// Это делало ВСЮ страницу клиентским рендером (CSR):
+//   - Google получал пустой HTML при первом обходе
+//   - Весь контент (заголовки, тексты, мета) появлялся только после JS
+//   - Core Web Vitals LCP страдал — нет SSR-контента
+//   - Рейтинг в поиске снижался, так как Googlebot видел пустую страницу
+//
+// ИСПРАВЛЕНИЕ:
+//   1. Убран 'use client' и useCallback из page.tsx
+//   2. scrollToSection перенесён в lib/scroll.ts
+//   3. Navbar и HeroSection импортируют scrollToSection напрямую
+//      (они уже 'use client' — это допустимо)
+//
+// РЕЗУЛЬТАТ:
+//   - Google получает полный SSR HTML со всем контентом
+//   - AboutSection рендерится как Server Component (никакого JS!)
+//   - Client Components (Navbar, Hero, Gallery...) гидрируются отдельно
+//   - LCP улучшается за счёт SSR-контента в initial HTML
 
-import { useCallback } from 'react';
 import Navbar          from '@/app/components/Navbar';
 import HeroSection     from '@/app/components/HeroSection';
 import AboutSection    from '@/app/components/AboutSection';
@@ -11,36 +30,36 @@ import ContactSection  from '@/app/components/ContactSection';
 import FooterSection   from '@/app/components/FooterSection';
 import ScrollToTop     from '@/app/components/ScrollToTop';
 
-// Высоты шапки:
-//   Мобиль  — двухрядная (bar 64px + quick-strip ~42px) = 106px
-//   Десктоп — однорядная 68px
-const MOBILE_HEADER  = 106;
-const DESKTOP_HEADER = 68;
-
 export default function HomePage() {
-  const scrollTo = useCallback((id: string) => {
-    const el = document.getElementById(id);
-    if (!el) return;
-
-    const isMobile   = window.innerWidth < 1024;
-    const offset     = isMobile ? MOBILE_HEADER : DESKTOP_HEADER;
-    const top        = el.getBoundingClientRect().top + window.scrollY - offset;
-
-    window.scrollTo({ top, behavior: 'smooth' });
-  }, []);
-
   return (
     <div className="min-h-screen bg-[#1a1008] font-sans">
-      <Navbar onNavClick={scrollTo} />
-      <main>
-        <HeroSection     onCta={() => scrollTo('contact')} />
-        <AboutSection    />
+      {/*
+       * Navbar — Client Component ('use client').
+       * Теперь использует scrollToSection из lib/scroll.ts напрямую.
+       * Props onNavClick больше нет — не нужен.
+       */}
+      <Navbar />
+
+      <main id="main-content">
+        {/*
+         * HeroSection — Client Component ('use client').
+         * onCta больше нет — компонент сам вызывает scrollToSection('contact').
+         */}
+        <HeroSection />
+
+        {/* Server Component — рендерится на сервере, нет JS */}
+        <AboutSection />
+
+        {/* Client Components — гидрируются после загрузки JS */}
         <ServicesSection />
-        <GallerySection  />
+        <GallerySection />
         <ArticlesSection />
-        <ContactSection  />
-        <FooterSection   />
+        <ContactSection />
+
+        {/* Server Component — статический footer */}
+        <FooterSection />
       </main>
+
       <ScrollToTop />
     </div>
   );

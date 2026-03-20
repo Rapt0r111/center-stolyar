@@ -1,51 +1,47 @@
 'use client';
 
+// ─── Navbar.tsx — ОБНОВЛЕНО ───────────────────────────────────────────────────
+// ИЗМЕНЕНИЕ: убран prop onNavClick. Компонент напрямую импортирует scrollToSection
+// из lib/scroll.ts. Это позволяет page.tsx быть Server Component.
+//
+// Diff от предыдущей версии:
+//   - Убрана props-сигнатура { onNavClick: (id: string) => void }
+//   - Все onNavClick(id) заменены на scrollToSection(id)
+//   - Импорт scrollToSection добавлен
+// Всё остальное — без изменений.
+
 import { useState, useEffect, useRef } from 'react';
 import Image from 'next/image';
 import { Phone, Menu, X } from 'lucide-react';
 import {
   motion, AnimatePresence,
   useMotionValue, useSpring,
-  Variants
+  type Variants
 } from 'framer-motion';
 import { cn } from '@/lib/utils';
+import { scrollToSection } from '@/lib/scroll'; // ← НОВЫЙ ИМПОРТ
 
 const NAV_LINKS = [
-  { label: 'О нас', id: 'about' },
-  { label: 'Услуги', id: 'services' },
-  { label: 'Галерея', id: 'gallery' },
-  { label: 'Блог', id: 'articles' },
-  { label: 'Контакты', id: 'contact' },
-  { label: 'Карта', id: 'map' },
+  { label: 'О нас',    id: 'about'    },
+  { label: 'Услуги',   id: 'services' },
+  { label: 'Галерея',  id: 'gallery'  },
+  { label: 'Блог',     id: 'articles' },
+  { label: 'Контакты', id: 'contact'  },
+  { label: 'Карта',    id: 'map'      },
 ] as const;
 
 const QUICK_LINKS = [
-  { label: 'Услуги', id: 'services' },
-  { label: 'Портфолио', id: 'gallery' },
-  { label: 'Блог', id: 'articles' },
-  { label: 'Контакты', id: 'contact' },
+  { label: 'Услуги',    id: 'services' },
+  { label: 'Портфолио', id: 'gallery'  },
+  { label: 'Блог',      id: 'articles' },
+  { label: 'Контакты',  id: 'contact'  },
 ] as const;
-
-export const HEADER_HEIGHT_MOBILE = 106;
-export const HEADER_HEIGHT_DESKTOP = 68;
 
 type NavId = typeof NAV_LINKS[number]['id'];
 
-// ─── Scroll lock helpers ──────────────────────────────────────────────────────
-// scrollY сохраняем сюда при открытии, чтобы не терять при закрытии
 let _savedScrollY = 0;
-
-function lockScroll() {
-  _savedScrollY = window.scrollY;
-  // Только запрещаем скролл — без сдвига страницы
-  document.documentElement.style.overflow = 'hidden';
-}
-
-// restore=true → вернуть на сохранённую позицию (закрытие без навигации)
-// restore=false → просто снять блокировку (при клике на ссылку)
-function unlockScroll() {
-  document.documentElement.style.overflow = '';
-}
+function lockScroll()   { _savedScrollY = window.scrollY; document.documentElement.style.overflow = 'hidden'; }
+function unlockScroll() { document.documentElement.style.overflow = ''; }
 
 function useActiveSection(): NavId | '' {
   const [active, setActive] = useState<NavId | ''>('');
@@ -100,14 +96,13 @@ function NavPill({ activeId }: { activeId: string }) {
   );
 }
 
-// ─── Drawer ───────────────────────────────────────────────────────────────────
 const overlayVariants: Variants = {
   closed: { opacity: 0, transition: { duration: 0.3, ease: [0.4, 0, 1, 1] } },
-  open: { opacity: 1, transition: { duration: 0.35, ease: [0, 0, 0.2, 1] } },
+  open:   { opacity: 1, transition: { duration: 0.35, ease: [0, 0, 0.2, 1] } },
 };
 const drawerVariants: Variants = {
   closed: { x: '100%', transition: { duration: 0.35, ease: [0.4, 0, 1, 1] } },
-  open: { x: 0, transition: { duration: 0.4, ease: [0, 0, 0.2, 1] } },
+  open:   { x: 0,      transition: { duration: 0.4,  ease: [0, 0, 0.2, 1] } },
 };
 const linkVariants: Variants = {
   closed: { opacity: 0, x: 24 },
@@ -117,9 +112,7 @@ const linkVariants: Variants = {
   }),
 };
 
-function MobileDrawer({
-  open, activeId, onLink, onClose,
-}: {
+function MobileDrawer({ open, activeId, onLink, onClose }: {
   open: boolean; activeId: string;
   onLink: (id: string) => void; onClose: () => void;
 }) {
@@ -207,12 +200,12 @@ function MobileDrawer({
 }
 
 // ─── Main ─────────────────────────────────────────────────────────────────────
-export default function Navbar({ onNavClick }: { onNavClick: (id: string) => void }) {
+// ИЗМЕНЕНО: убран prop onNavClick, используем scrollToSection напрямую
+export default function Navbar() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
   const [mounted, setMounted] = useState(false);
   const activeSection = useActiveSection();
-  // флаг: закрываем меню для навигации (не нужно восстанавливать старую позицию)
   const navigatingRef = useRef(false);
 
   useEffect(() => { setMounted(true); }, []);
@@ -223,8 +216,6 @@ export default function Navbar({ onNavClick }: { onNavClick: (id: string) => voi
     return () => window.removeEventListener('scroll', onScroll);
   }, []);
 
-  // Блокируем скролл при открытии. Cleanup — разблокируем с восстановлением
-  // позиции, ЕСЛИ не навигируем (navigatingRef.current === false).
   useEffect(() => {
     if (menuOpen) {
       lockScroll();
@@ -235,18 +226,18 @@ export default function Navbar({ onNavClick }: { onNavClick: (id: string) => voi
     }
   }, [menuOpen]);
 
+  // ИЗМЕНЕНО: onNavClick(id) → scrollToSection(id)
   const handleLink = (id: string) => {
     if (menuOpen) {
       navigatingRef.current = true;
       setMenuOpen(false);
-      setTimeout(() => onNavClick(id), 60);
+      setTimeout(() => scrollToSection(id), 60);
     } else {
-      onNavClick(id);
+      scrollToSection(id);
     }
   };
 
   const handleClose = () => {
-    // Закрытие без навигации — восстанавливаем позицию
     navigatingRef.current = false;
     setMenuOpen(false);
   };
@@ -259,14 +250,9 @@ export default function Navbar({ onNavClick }: { onNavClick: (id: string) => voi
     <>
       <header
         className="fixed top-0 left-0 right-0 z-50 transition-shadow duration-500"
-        style={{
-          ...bgStyle,
-          boxShadow: scrolled ? '0 4px 32px rgba(0,0,0,0.5)' : 'none',
-        }}
+        style={{ ...bgStyle, boxShadow: scrolled ? '0 4px 32px rgba(0,0,0,0.5)' : 'none' }}
       >
-        {/* ── Полоса 1 ──────────────────────────────────────────────── */}
         <div style={{ borderBottom: '1px solid rgba(200,169,110,0.12)' }}>
-
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 lg:h-[68px] flex items-center justify-between">
 
             <button onClick={() => handleLink('hero')} className="flex items-center gap-2.5 group shrink-0">
@@ -337,9 +323,7 @@ export default function Navbar({ onNavClick }: { onNavClick: (id: string) => voi
           </div>
         </div>
 
-        {/* ── Полоса 2: быстрая навигация (мобиль) ─────────────────── */}
         <div className="lg:hidden" style={{ borderBottom: '1px solid rgba(200,169,110,0.10)' }}>
-
           <div className="flex items-center px-3 py-2 gap-2">
             {QUICK_LINKS.map(link => {
               const isActive = activeSection === link.id;
