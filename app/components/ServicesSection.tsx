@@ -45,6 +45,7 @@ import {
   QUALITY_MICRO,
 } from '@/lib/image-preloader';
 import ImageSkeleton from '@/app/components/ui/ImageSkeleton';
+import { scrollToSection } from '@/lib/scroll';
 
 const Stairs = createLucideIcon('Stairs', [
   ['path', { d: 'M3 21h18', key: 'base' }],
@@ -57,11 +58,11 @@ const ICON_MAP: Record<string, LucideIcon> = {
 
 const SERVICE_GALLERY: Record<string, string> = {
   'Лестницы': 'Лестницы',
-  'Перила':   'Лестницы',
-  'Двери':    'Двери',
-  'Мебель':   'Мебель',
-  'Арки':     'Арки',
-  'Потолки':  'Лестницы',
+  'Перила': 'Лестницы',
+  'Двери': 'Двери',
+  'Мебель': 'Мебель',
+  'Арки': 'Арки',
+  'Потолки': 'Лестницы',
   'Кабинеты': 'Мебель',
 };
 
@@ -113,7 +114,7 @@ function PhotoLightbox({
     const handler = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose();
       if (e.key === 'ArrowRight') setIdx(i => (i + 1) % images.length);
-      if (e.key === 'ArrowLeft')  setIdx(i => (i - 1 + images.length) % images.length);
+      if (e.key === 'ArrowLeft') setIdx(i => (i - 1 + images.length) % images.length);
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
@@ -252,7 +253,7 @@ function ServiceModal({
       LIGHTBOX_WIDTH,
       QUALITY_HIGH,
     );
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [service.title]);
 
   useEffect(() => {
@@ -622,10 +623,8 @@ export default function ServicesSection() {
     setTimeout(() => {
       const el = document.getElementById('contact');
       if (!el) return;
-      const isMobile = window.innerWidth < 1024;
-      const offset = isMobile ? 106 : 68;
-      const top = el.getBoundingClientRect().top + window.scrollY - offset;
-      window.scrollTo({ top, behavior: 'smooth' });
+      scrollToSection('contact');
+
     }, 380);
   }, []);
 

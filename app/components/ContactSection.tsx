@@ -114,7 +114,7 @@ export default function ContactSection() {
    * Returns [currentState, formAction, isPending]
    * formAction передаётся напрямую в <form action={...}>
    */
-  const [state, formAction, isPending] = useActionState(submitContactAction, INITIAL_STATE);
+  const [state, formAction] = useActionState(submitContactAction, INITIAL_STATE);
 
   // Reset: переключаем на новый экземпляр через key
   // Простейший способ без дополнительного useState — используем key на форме.
